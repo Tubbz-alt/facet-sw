@@ -24,8 +24,7 @@
 
 # Variables and paths to dependent modules:
 MODULES = ${EPICS_MODULES_TOP}
-#IOCADMIN = $(MODULES)/iocAdmin-3-1-15
-IOCADMIN = $(MODULES)/iocAdmin/iocAdmin-R3-3-1-2
+IOCADMIN = $(MODULES)/iocAdmin-3-1-15
 
 # EPICS_BASE should appear last so earlier modules can override stuff:
 EPICS_BASE = ${EPICS_BASE_TOP}

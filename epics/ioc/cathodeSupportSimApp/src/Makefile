@@ -11,11 +11,7 @@ DBD += cathodeSupportSim.dbd
 
 # cathodeSupportSim.dbd will include these files:
 cathodeSupportSim_DBD += base.dbd
-#cathodeSupportSim_DBD += asyn.dbd
 cathodeSupportSim_DBD += iocAdmin.dbd
-#cathodeSupportSim_DBD += calc.dbd
-#cathodeSupportSim_DBD += sseqRecord.dbd
-# cathodeSupportSim_registerRecordDeviceDriver.cpp derives from cathodeSupportSim.dbd
 cathodeSupportSim_SRCS += cathodeSupportSim_registerRecordDeviceDriver.cpp
 
 # Build the main IOC entry point where needed
@@ -23,10 +19,7 @@ cathodeSupportSim_SRCS_DEFAULT += cathodeSupportSimMain.cpp
 cathodeSupportSim_SRCS_vxWorks += -nil-
 
 # Required library support
-#cathodeSupportSim_LIBS += asyn
-#cathodeSupportSim_LIBS += busy
 cathodeSupportSim_LIBS += devIocStats
-#cathodeSupportSim_LIBS += calc
 
 # Finally link IOC to the EPICS Base libraries
 cathodeSupportSim_LIBS += $(EPICS_BASE_IOC_LIBS)
