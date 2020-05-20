@@ -1,5 +1,5 @@
 <deployment-project plugin="plugin.ezdeploy" plugin-version="1.0">
-  <configuration build-checksum="3905922188" file="/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/F2_CathodeServices/F2_CathodeServices.prj" location="/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/F2_CathodeServices" name="F2_CathodeServices" preferred-package-location="/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles" preferred-package-type="package.type.install" target="target.ezdeploy.standalone" target-name="Application Compiler">
+  <configuration file="/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/F2_CathodeServices/F2_CathodeServices.prj" location="/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/F2_CathodeServices" name="F2_CathodeServices" preferred-package-location="/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/F2_CathodeServices/F2_CathodeServices/for_redistribution" preferred-package-type="package.type.install" target="target.ezdeploy.standalone" target-name="Application Compiler">
     <param.appname>F2_CathodeServices</param.appname>
     <param.icon />
     <param.icons />
@@ -29,10 +29,10 @@ MR/v98/runtime/glnxa64:MR/v98/bin/glnxa64:MR/v98/sys/os/glnxa64:MR/v98/sys/openg
 If it is defined, set it to the following:
 
 ${LD_LIBRARY_PATH}:MR/v98/runtime/glnxa64:MR/v98/bin/glnxa64:MR/v98/sys/os/glnxa64:MR/v98/sys/opengl/lib/glnxa64</param.target.install.notes>
-    <param.intermediate>/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles</param.intermediate>
-    <param.files.only>/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles</param.files.only>
-    <param.output>/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles</param.output>
-    <param.logdir>/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles</param.logdir>
+    <param.intermediate>${PROJECT_ROOT}/F2_CathodeServices/for_testing</param.intermediate>
+    <param.files.only>${PROJECT_ROOT}/F2_CathodeServices/for_redistribution_files_only</param.files.only>
+    <param.output>${PROJECT_ROOT}/F2_CathodeServices/for_redistribution</param.output>
+    <param.logdir>${PROJECT_ROOT}/F2_CathodeServices</param.logdir>
     <param.enable.clean.build>false</param.enable.clean.build>
     <param.user.defined.mcr.options />
     <param.target.type>subtarget.standalone</param.target.type>
@@ -68,6 +68,10 @@ ${LD_LIBRARY_PATH}:MR/v98/runtime/glnxa64:MR/v98/bin/glnxa64:MR/v98/sys/os/glnxa
       <param.installpath.combo />
       <param.logo />
       <param.install.notes />
+      <param.intermediate />
+      <param.files.only />
+      <param.output />
+      <param.logdir />
       <param.enable.clean.build />
       <param.user.defined.mcr.options />
       <param.target.type />
@@ -94,7 +98,7 @@ ${LD_LIBRARY_PATH}:MR/v98/runtime/glnxa64:MR/v98/bin/glnxa64:MR/v98/sys/os/glnxa
       <file>${PROJECT_ROOT}/CathodeServicesState.m</file>
       <file>${PROJECT_ROOT}/CathodeServices_limits.mlapp</file>
       <file>${PROJECT_ROOT}/F2_CathodeServicesApp.m</file>
-      <file>/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/F2_CathodeServices_configdata.mat</file>
+      <file>${PROJECT_ROOT}/F2_CathodeServices_configdata.mat</file>
       <file>/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/common/GUI_PREFS.m</file>
       <file>/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/common/PV.m</file>
       <file>/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/common/PVtype.m</file>
@@ -116,10 +120,10 @@ ${LD_LIBRARY_PATH}:MR/v98/runtime/glnxa64:MR/v98/bin/glnxa64:MR/v98/sys/os/glnxa
       <file>/usr/local/Lucretia/src/labca/lcaSetSeverityWarnLevel.mexa64</file>
     </fileset.depfun>
     <build-deliverables>
-      <file location="/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles" name="F2_CathodeServices" optional="false">/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles/F2_CathodeServices</file>
-      <file location="/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles" name="run_F2_CathodeServices.sh" optional="false">/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles/run_F2_CathodeServices.sh</file>
-      <file location="/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles" name="readme.txt" optional="true">/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles/readme.txt</file>
-      <file location="/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles" name="splash.png" optional="false">/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/buildfiles/splash.png</file>
+      <file location="${PROJECT_ROOT}/F2_CathodeServices/for_testing" name="F2_CathodeServices" optional="false">/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/F2_CathodeServices/F2_CathodeServices/for_testing/F2_CathodeServices</file>
+      <file location="${PROJECT_ROOT}/F2_CathodeServices/for_testing" name="splash.png" optional="false">/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/F2_CathodeServices/F2_CathodeServices/for_testing/splash.png</file>
+      <file location="${PROJECT_ROOT}/F2_CathodeServices/for_testing" name="run_F2_CathodeServices.sh" optional="false">/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/F2_CathodeServices/F2_CathodeServices/for_testing/run_F2_CathodeServices.sh</file>
+      <file location="${PROJECT_ROOT}/F2_CathodeServices/for_testing" name="readme.txt" optional="true">/media/psf/Home/OneDrive - SLAC National Accelerator Laboratory/Work/facet-sw/matlab/F2_CathodeServices/F2_CathodeServices/for_testing/readme.txt</file>
     </build-deliverables>
     <workflow />
     <matlab>
