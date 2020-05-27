@@ -1,11 +1,20 @@
-function humidity = GetSlacMapData(pvupload,doplot)
-% humidity = GetSlacMapData
+function humidity = GetSlacMapData(datatime,pvupload,doplot)
+% humidity = GetSlacMapData()
 %  returns relative humidity (%) for SLAC main campus location
 %  data is 2 hours old and updated every 40 mins
-% GetSlacMapData(PV)
+% GetSlacMapData(datatime)
+%  datatime is anything that datevec command will pass (must be < 9 days ago)
+% GetSlacMapData(datatime,PV)
 %  writes humidity to PV
-% GetSlacMapData([],true)
+%  put datatime=[] for latest data
+% GetSlacMapData(PV,datatime,true)
 %  Plot map of SLAC location humidity data captured for
+%  Put [] for PV and/or datatime if not wanted
+
+% Can ask for any date-time up to 9 days previously
+if etime(datevec(now),datevec(datenum(datetime)))/(3600*24) > 9
+  error('Requested date must be newer than 9 days ago')
+end
 
 ran=0.01;
 slaclat = 37.41657 ; % SLAC S30 lat/long
@@ -40,8 +49,12 @@ imageLength = 1024;
                            'Lonlim',lonlim, ...
                            'ImageHeight',imageLength, ...
                            'ImageWidth',imageLength);
-Ah = wmsread(humidLayer,'Latlim',latlim, ...
-                           'Lonlim',lonlim);                         
+if exist('datatime','var')
+%   time = '2010-04-16T00:00:00Z';
+  Ah = wmsread(humidLayer,'Latlim',latlim, 'Lonlim',lonlim,'Time',datenum(datatime));
+else
+  Ah = wmsread(humidLayer,'Latlim',latlim, 'Lonlim',lonlim);
+end
 if exist('doplot','var') && doplot
   figure
   geoshow(A,R);
