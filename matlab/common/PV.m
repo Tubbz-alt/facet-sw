@@ -22,6 +22,7 @@ classdef PV < handle
     STDERR = 2 % Standard error output destination
     nmax uint32 % limit number of returned values (per control system PV) empty=default: get everything available
     putwait logical = false % wait for confirmation of pvput command
+    timeout double {mustBePositive} = 3 % timout in s for waiting for a new monitor value
   end
   properties(SetAccess=protected)
     mode string = "r" % Access mode: "r", or "rw"
@@ -111,6 +112,46 @@ classdef PV < handle
     function stop(obj)
       %STOP stop update timer running
       obj(1).utimer.stop;
+    end
+    function aveval = cagetave(obj,Ndat)
+      %CAGETAVE Return the average of N new values
+      % aveval=cagetave(N)
+      %  aveval is average of N new values (monitor must be set)
+      %  aveval is double array of length pvname
+      %  numeric scalar output from PV assumed
+      
+      % If passing a vector of PV objects, loop through and get each
+      if length(obj)>1
+        aveval=cell(1,length(obj));
+        for iobj=1:length(obj)
+          aveval{iobj}=obj(iobj).cagetave(Ndat);
+        end
+        return
+      end
+      
+      % If not set a monitor already, do that now
+      if ~obj.moniregistered
+        for ipv=1:length(obj.pvname)
+          lcaSetMonitor(cellstr(obj.pvname(ipv)));
+        end
+        obj.moniregistered=true;
+      end
+      
+      % Gather required data
+      aveval=zeros(1,length(obj.pvname));
+      for ival=1:Ndat
+        for ipv=1:length(obj.pvname)
+          newval=lcaGet(cellstr(obj.pvname(ipv)));
+          aveval(ipv)=aveval(ipv)+newval(1);
+          t0=tic;
+          while ~lcaNewMonitorValue(cellstr(obj.pvname(ipv))) && toc(t0)<obj.timeout
+            pause(0.01);
+          end
+        end
+      end
+      for ipv=1:length(obj.pvname)
+        aveval(ipv)=aveval(ipv)/Ndat;
+      end
     end
     function [newval,updt]=caget(obj,~,~)
       %CAGET Fetch control system values for this PV
@@ -540,6 +581,18 @@ classdef PV < handle
         end
       end
       pvtab.VarNames = cellstr(names)';
+    end
+    function pset(obj,propname,val)
+      % If passing a vector of PV objects, loop through and set each
+      if length(val)==1 && length(obj)>1
+        for iobj=1:length(obj)
+          obj(iobj).(propname)=val ;
+        end
+      elseif length(val)==length(obj)
+        for iobj=1:length(obj)
+          obj(iobj).(propname)=val(iobj) ;
+        end
+      end
     end
   end
   methods(Access=protected)

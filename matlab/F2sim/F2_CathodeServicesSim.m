@@ -58,7 +58,7 @@ classdef F2_CathodeServicesSim < handle
       obj.pvs.CCD_xpos = PV('pvname',obj.CCD_name+"Stats:Xpos_RBV",'monitor',true); % xpos on CCD
       obj.pvs.CCD_ypos = PV('pvname',obj.CCD_name+"Stats:Ypos_RBV",'monitor',true); % ypos on CCD
       obj.pvs.laser_energy_set = PV('pvname',"LASR:LT10:930:PWR_SET",'monitor',true); % Laser energy setting (uJ)
-      obj.pvs.gun_vacuum = PV('pvname',"VGCC:IN10:113:P",'monitor',true);  % Vacuum pressire for gun [nTorr]
+      obj.pvs.gun_vacuum = PV('pvname',"VGCC:IN10:113:P",'monitor',true,'conv',1e9);  % Vacuum pressire for gun [nTorr]
       obj.pvs.laser_energy = PV('pvname',"LASR:LT10:930:PWR"); % Laser energy readout (uJ)
       obj.pvs.CCD_datatype = PV('pvname',obj.CCD_name+"DataType",'monitor',true); % CCD camera data type
       obj.pvs.CCD_gain = PV('pvname',obj.CCD_name+"Gain",'monitor',true); % CCD camera image gain factor
@@ -134,12 +134,12 @@ classdef F2_CathodeServicesSim < handle
        % Set Gun vacuum pressure, including noise
       vacpres=obj.SimGunVacuum_pres(1)+lasE*obj.SimGunVacuum_pres(2);
       vacpres=vacpres+randn*obj.SimGunVacuum_noise ;
-      caput(obj.pvs.gun_vacuum,double(vacpres));
+      caput(obj.pvs.gun_vacuum,double(vacpres)./obj.pvs.gun_vacuum.conv);
       % only update CCD image if driver posts new image #
       imno_last=obj.pvs.CCD_counter.val;
       imno=caget(obj.pvs.CCD_counter);
       if isempty(imno_last) || imno~=imno_last{1}
-        obj.SimGenVCC(shutin,teleIN); % Update VCC image
+        obj.SimGenVCC(teleIN); % Update VCC image
       end
     end
     function shutdown(obj)
@@ -155,7 +155,7 @@ classdef F2_CathodeServicesSim < handle
       fprintf(obj.STDERR,'%s: timer service crashed, restarting\n',datetime);
       obj.wtimer.start;
     end
-    function SimGenVCC(obj,shutin,teleIN)
+    function SimGenVCC(obj,teleIN)
       %SIMGENVCC Generate VCC image based on EPICS PV settings
       
       % Generate image of cathode spot in camera pixel units, add noise to
@@ -183,25 +183,22 @@ classdef F2_CathodeServicesSim < handle
       caput(obj.pvs.CCD_xpos,xpos*1e3); % um
       caput(obj.pvs.CCD_ypos,ypos*1e3); % um
       [~,Ri]=cart2pol(X-xpos,Y-ypos);
-      if shutin
-        img = zeros(size(XY)) ;
-      else
-        img = mvnpdf(XY,[xpos,ypos],eye(2).*(Rstd.^2));
-        img(Ri>Rcut) = 0;
-        img=floor(impk.*(img./max(img(:))));
-      end
+      img = mvnpdf(XY,[xpos,ypos],eye(2).*(Rstd.^2));
+      img(Ri>Rcut) = 0;
+      img=floor(impk.*(img./max(img(:))));
       img=img+randi(1+obj.SimVCC_pixnoise,size(img))-1;
       img = cast(img,lower(dtype)) ;
-      caput(obj.pvs.CCD_img,double(img(:)'));
       caput(obj.pvs.CCD_intensity,max(img(:)));
       % Get rms quatities from FWHM cubic fit to radial distribution
-      if ~shutin
-        img(img<0.1*impk)=0;
-        [sy,sx]=obj.ellipseFit(double(reshape(img,ny,nx)),ny,nx);
-        dx=x2-x1; dy=y2-y1;
-        caput(obj.pvs.CCD_spotsize_x,sx*dx*1e3);
-        caput(obj.pvs.CCD_spotsize_y,sy*dy*1e3);
-      end
+      img(img<0.1*impk)=0;
+      [sy,sx]=obj.ellipseFit(double(reshape(img,ny,nx)),ny,nx);
+      dx=x2-x1; dy=y2-y1;
+      caput(obj.pvs.CCD_spotsize_x,sx*dx*1e3);
+      caput(obj.pvs.CCD_spotsize_y,sy*dy*1e3);
+      % Reshape image to match format experienced on facet-srv
+      img=reshape(img(:),ny,nx);
+      img=rot90(img,3);
+      caput(obj.pvs.CCD_img,double(img));
     end
   end
   methods(Hidden,Static)

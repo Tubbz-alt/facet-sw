@@ -1,0 +1,2 @@
+epicsEnvSet("IOC","ioccathodeSupportSim")
+epicsEnvSet("TOP","/home/fphysics/whitegr/facet-sw/epics/ioc")
