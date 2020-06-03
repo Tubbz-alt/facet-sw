@@ -1,0 +1,3 @@
+[submodule "glue/sciclean"]
+	path = glue/sciclean
+	url = ../labca-sciclean.git

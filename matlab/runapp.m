@@ -1,4 +1,4 @@
-function appobj = runapp(appname)
+function runapp(appname)
 %RUNAPP Run FACET-II application from Matlab environment
 
 if ~nargin || ~exist(appname,'dir')
@@ -6,5 +6,8 @@ if ~nargin || ~exist(appname,'dir')
 end
 
 addpath common
+addpath web
 cd(appname);
 appobj=eval(appname);
+waitfor(appobj)
+exit

@@ -1,0 +1,252 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN'
+     'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'>
+
+<html>
+<head>
+<title>Data&#x20;Fanout&#x20;Record&#x20;(dfanout)</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link rel='stylesheet' href='style.css' type='text/css'>
+</head>
+<body>
+
+
+
+
+<div class="pod">
+
+<h1 id="Data-Fanout-Record-dfanout-">Data Fanout Record (dfanout)</h1>
+
+<p>The Data Fanout or &quot;dfanout&quot; record is used to forward data to up to eight other records. It&#39;s similar to the fanout record except that the capability to forward data has been added to it. If has no associated device support.</p>
+
+<h2 id="Parameter-Fields">Parameter Fields</h2>
+
+<p>The fields in this record can be classified into the following categories:</p>
+
+<ul>
+
+<li><p>scan parameters</p>
+
+</li>
+<li><p>desired output parameters</p>
+
+</li>
+<li><p>write parameters</p>
+
+</li>
+<li><p>operator display parameters</p>
+
+</li>
+<li><p>alarm parameters</p>
+
+</li>
+<li><p>monitor parameters</p>
+
+</li>
+<li><p>run-time and simulation mode parameters</p>
+
+</li>
+</ul>
+
+<h3 id="Scan-Parameters">Scan Parameters</h3>
+
+<p>The data fanout record has the standard fields for specifying under what circumstances it will be processed. These fields are listed in <a href="#Scan-Fields">&quot;Scan Fields&quot;</a>. In addition, <a href="#Scanning-Specification">&quot;Scanning Specification&quot;</a> explains how these fields are used. Since the data fanout record supports no direct interfaces to hardware, it cannot be scanned on I/O interrupt, so its SCAN field cannot be <code>I/O Intr</code>.</p>
+
+<h3 id="Desired-Output-Parameters">Desired Output Parameters</h3>
+
+<p>The data fanout record must specify where the desired output value originates, i.e., the data which is to be fowarded to the records in its output links. The output mode select (OMSL) field determines whether the output originates from another record or from run-time database access. When set to <code>closed_loop</code>, the desired output is retrieved from the link specified in the desired output (DOL) field, which can specify either a database or a channel access link, and placed into the VAL field. When set to <code>supervisory</code>, the desired output can be written to the VAL field via dbPuts at run-time.</p>
+
+<p>The DOL field can also be a constant in which case the VAL field is initialized to the constant value.</p>
+
+<p>Note that there are no conversion parameters, so the desired output value undergoes no conversions before it is sent out to the output links.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">DOL</td><td class="cell">Desired Output Loc</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">OMSL</td><td class="cell">Output Mode Select</td><td class="cell">MENU (<a href='menuOmsl.html'>menuOmsl</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">VAL</td><td class="cell">Desired Output</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr></table></blockquote>
+
+<h3 id="Write-Parameters">Write Parameters</h3>
+
+<p>The OUTA-OUTH fields specify where VAL is to be sent. Each field that is to forward data must specify an address to another record. See <a href="#Address-Specification">&quot;Address Specification&quot;</a> for information on specifying links.</p>
+
+<p>The SELL, SELM, and SELN fields specify which output links are to be used.</p>
+
+<h4 id="Menu-dfanoutSELM">Menu dfanoutSELM</h4>
+
+<p>SELM is a menu, with three choices:</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Index</th><th>Identifier</th><th>Choice String</th></tr>
+<tr>
+<td class='cell DBD_Menu index'>0</td>
+<td class='cell DBD_Menu identifier'>dfanoutSELM_All</td>
+<td class='cell DBD_Menu choice'>All</td>
+</tr>
+<tr>
+<td class='cell DBD_Menu index'>1</td>
+<td class='cell DBD_Menu identifier'>dfanoutSELM_Specified</td>
+<td class='cell DBD_Menu choice'>Specified</td>
+</tr>
+<tr>
+<td class='cell DBD_Menu index'>2</td>
+<td class='cell DBD_Menu identifier'>dfanoutSELM_Mask</td>
+<td class='cell DBD_Menu choice'>Mask</td>
+</tr>
+</table></blockquote>
+
+<p>If SELM==&quot;All&quot;, then all output links are used, and the values of SELL and SELN are ignored.</p>
+
+<p>If SELM==&quot;Specified&quot;, then the value of SELN is used to specify a single link which will be used. If SELN==0, then no link will be used; if SELN==1, then OUTA will be used, and so on.</p>
+
+<p>SELN can either have its value set directly, or have its values retrieved from another EPICS PV. If SELL is a valid PV link, then SELN will be set to the values of the linked PV.</p>
+
+<p>If SELM==&quot;Mask&quot;, then SELN will be treated as a bit mask. If bit one of SELN is set, then OUTA will be used, if bit two is set, OUTB will be used. Thus if SELN==5, OUTC and OUTA will be used.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">OUTA</td><td class="cell">Output Spec A</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">OUTB</td><td class="cell">Output Spec B</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">OUTC</td><td class="cell">Output Spec C</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">OUTD</td><td class="cell">Output Spec D</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">OUTE</td><td class="cell">Output Spec E</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">OUTF</td><td class="cell">Output Spec F</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">OUTG</td><td class="cell">Output Spec G</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">OUTH</td><td class="cell">Output Spec H</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Operator-Display-Parameters">Operator Display Parameters</h3>
+
+<p>These parameters are used to present meaningful data to the operator. They display the value and other parameters of the data fanout record either textually or graphically.</p>
+
+<p>The EGU field can contain a string of up to 16 characters describing the value on the VAL field.</p>
+
+<p>The HOPR and LOPR fields determine the upper and lower display limits for graphic displays and the upper and lower control limits for control displays. They apply to the VAL, HIHI, HIGH, LOW, and LOLO fields. The record support routines <code>get_graphic_double</code> or <code>get_control_double</code> retrieve HOPR and LOPR.</p>
+
+<p>See <a href="#Fields-Common-to-All-Record-Types">&quot;Fields Common to All Record Types&quot;</a> for more on the record name (NAME) and description (DESC) fields.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">EGU</td><td class="cell">Engineering Units</td><td class="cell">STRING [16]</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">HOPR</td><td class="cell">High Operating Range</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LOPR</td><td class="cell">Low Operating Range</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">NAME</td><td class="cell">Record Name</td><td class="cell">STRING [61]</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">DESC</td><td class="cell">Descriptor</td><td class="cell">STRING [41]</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Alarm-Parameters">Alarm Parameters</h3>
+
+<p>The possible alarm conditions for data fanouts are the SCAN, READ, INVALID, and limit alarms. The SCAN and READ alarms are called by the record routines. The limit alarms are configured by the user in the HIHI, LOLO, HIGH, and LOW fields using floating point values. The limit alarms apply only to the VAL field. The severity for each of these limits is specified in the corresponding field (HHSV, LLSV, HSV, LSV) and can be either NO_ALARM, MINOR, or MAJOR. In the hysteresis field (HYST) can be entered a number which serves as the deadband on the limit alarms.</p>
+
+<p>See <a href="#Alarm-Specification">&quot;Alarm Specification&quot;</a> for a complete explanation of alarms and these fields. <a href="#Alarm-Fields">&quot;Alarm Fields&quot;</a> lists other fields related to alarms that are common to all record types.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">HIHI</td><td class="cell">Hihi Alarm Limit</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">HIGH</td><td class="cell">High Alarm Limit</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">LOW</td><td class="cell">Low Alarm Limit</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">LOLO</td><td class="cell">Lolo Alarm Limit</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">HHSV</td><td class="cell">Hihi Severity</td><td class="cell">MENU (<a href='menuAlarmSevr.html'>menuAlarmSevr</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">HSV</td><td class="cell">High Severity</td><td class="cell">MENU (<a href='menuAlarmSevr.html'>menuAlarmSevr</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">LSV</td><td class="cell">Low Severity</td><td class="cell">MENU (<a href='menuAlarmSevr.html'>menuAlarmSevr</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">LLSV</td><td class="cell">Lolo Severity</td><td class="cell">MENU (<a href='menuAlarmSevr.html'>menuAlarmSevr</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">HYST</td><td class="cell">Alarm Deadband</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Monitor-Parameters">Monitor Parameters</h3>
+
+<p>These parameters are used to determine when to send monitors placed on the VAL field. These monitors are sent when the value field exceeds the last monitored fields by the specified deadband, ADEL for archivers monitors and MDEL for all other types of monitors. If these fields have a value of zero, everytime the value changes, a monitor will be triggered; if they have a value of -1, everytime the record is scanned, monitors are triggered. See <a href="#Monitor-Specification">&quot;Monitor Specification&quot;</a> for a complete explanation of monitors.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">ADEL</td><td class="cell">Archive Deadband</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">MDEL</td><td class="cell">Monitor Deadband</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Run-Time-Parameters-and-Simulation-Mode-Parameters">Run-Time Parameters and Simulation Mode Parameters</h3>
+
+<p>These parameters are used by the run-time code for processing the data fanout record. Ther are not configurable. They are used to implement the hysteresis factors for monitor callbacks.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">LALM</td><td class="cell">Last Value Alarmed</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">ALST</td><td class="cell">Last Value Archived</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">MLST</td><td class="cell">Last Val Monitored</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr></table></blockquote>
+
+<h2 id="Record-Support">Record Support</h2>
+
+<h3 id="Record-Support-Routines">Record Support Routines</h3>
+
+<h2 id="init_record-"><code>init_record()</code></h2>
+
+<p>This routine initializes all output links that are defined. Then it initializes DOL if DOL is a constant or a PV_LINK. When initializing the output links and the DOL link, a non-zero value is returned if an error occurs.</p>
+
+<h2 id="process-"><code>process()</code></h2>
+
+<p>See next section.</p>
+
+<h2 id="get_units-"><code>get_units()</code></h2>
+
+<p>The routine copies the string specified in the EGU field to the location specified by a pointer which is passed to the routine.</p>
+
+<h2 id="get_graphic_double-"><code>get_graphic_double()</code></h2>
+
+<p>If the referenced field is VAL, HIHI, HIGH, LOW, or LOLO, this routine sets the <code>upper_disp_limit</code> member of the <code>dbr_grDouble</code> structure to the HOPR and the <code>lower_disp_limit</code> member to the LOPR. If the referenced field is not one of the above fields, then <code>recGblGetControlDouble()</code> routine is called.</p>
+
+<h2 id="get_control_double-"><code>get_control_double()</code></h2>
+
+<p>Same as the <code>get_graphic_double</code> routine except that it uses the <code>dbr_ctrlDouble</code> structure.</p>
+
+<h2 id="get_alarm_double-"><code>get_alarm_double()</code></h2>
+
+<p>This sets the members of the <code>dbr_alDouble</code> structure to the specified alarm limits if the referenced field is VAL:</p>
+
+<ul>
+
+<p>upper_alarm_limit = HIHI</p>
+
+<p>upper_warning_limit = HIGH</p>
+
+<p>lower_warning_limit = LOW</p>
+
+<p>lower_alarm_limit = LOLO</p>
+
+</ul>
+
+<p>If the referenced field is not VAL, the <code>recGblGetAlarmDouble()</code> routine is called.</p>
+
+<h3 id="Record-Processing">Record Processing</h3>
+
+<dl>
+
+<dt>1. The <code>process()</code> routine first retrieves a value for DOL and places it in VAL if OMSL is set to colsed loop mode. If an error occurs, then UDF is set to FALSE.</dt>
+<dd>
+
+</dd>
+<dt>2. PACT is set TRUE</dt>
+<dd>
+
+</dd>
+<dt>3. VAL is then sent to all the records specified in the OUTA-OUTH fields by calling <code>recGblePutLinkValue()</code> for each link.</dt>
+<dd>
+
+</dd>
+<dt>4. Alarms are checked and monitors are called if conditions apply.</dt>
+<dd>
+
+</dd>
+<dt>5. The data fanout&#39;s own forward link is then processed.</dt>
+<dd>
+
+</dd>
+<dt>6. PACT is set FALSE, and the <code>process()</code> routine returns. A -1 is returned if there was an error writing values to one of the output links.</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+
+</div>
+
+</body>
+</html>
+

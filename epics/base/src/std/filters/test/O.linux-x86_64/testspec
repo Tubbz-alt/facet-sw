@@ -1,0 +1,4 @@
+OS-class: Linux
+Target-arch: linux-x86_64
+Tests: tsTest.t dbndTest.t arrTest.t syncTest.t decTest.t
+Files: ../O.Common/filterTest.dbd ../xRecord.db ../arrTest.db

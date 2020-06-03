@@ -1,0 +1,233 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN'
+     'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'>
+
+<html>
+<head>
+<title>String&#x20;Input&#x20;Record&#x20;(stringin)</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link rel='stylesheet' href='style.css' type='text/css'>
+</head>
+<body>
+
+
+
+
+<div class="pod">
+
+<h1 id="String-Input-Record-stringin-">String Input Record (stringin)</h1>
+
+<p>The string input record retrieves an arbitrary ASCII string of up to 40 characters. Several device support routines are available, all of which are soft device support for retrieving values from other records or other software components.</p>
+
+<h2 id="Parameter-Fields">Parameter Fields</h2>
+
+<p>The record-specific fields are described below, grouped by functionality.</p>
+
+<h3 id="Scan-Parameters">Scan Parameters</h3>
+
+<p>The string input record has the standard fields for specifying under what circumstances it will be processed. These fields are listed in <a href="#Scan-Fields">&quot;Scan Fields&quot;</a>. In addition, <a href="#Scanning-Specification">&quot;Scanning Specification&quot;</a> explains how these fields are used.</p>
+
+<h3 id="Read-Parameters">Read Parameters</h3>
+
+<p>The INP field determines where the string input record gets its string. It can be a database or channel access link, or a constant. If constant, the VAL field is initialized with the constant and can be changed via dbPuts. Otherwise, the string is read from the specified location each time the record is processed and placed in the VAL field. The maximum number of characters that the string in VAL can be is 40. In addition, the appropriate device support module must be entered into the DTYP field.</p>
+
+<p>See <a href="#Address-Specification">&quot;Address Specification&quot;</a> for information on specifying links.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">VAL</td><td class="cell">Current Value</td><td class="cell">STRING [40]</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">INP</td><td class="cell">Input Specification</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DTYP</td><td class="cell">Device Type</td><td class="cell">DEVICE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Monitor-Parameters">Monitor Parameters</h3>
+
+<p>These parameters are used to specify when the monitor post should be sent by <code>monitor()</code> routine. There are two possible choices:</p>
+
+<h4 id="Menu-stringinPOST">Menu stringinPOST</h4>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Index</th><th>Identifier</th><th>Choice String</th></tr>
+<tr>
+<td class='cell DBD_Menu index'>0</td>
+<td class='cell DBD_Menu identifier'>stringinPOST_OnChange</td>
+<td class='cell DBD_Menu choice'>On Change</td>
+</tr>
+<tr>
+<td class='cell DBD_Menu index'>1</td>
+<td class='cell DBD_Menu identifier'>stringinPOST_Always</td>
+<td class='cell DBD_Menu choice'>Always</td>
+</tr>
+</table></blockquote>
+
+<p>APST is used for archiver monitors and MPST is for all other type of monitors.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">MPST</td><td class="cell">Post Value Monitors</td><td class="cell">MENU (<a href='#Menu-stringinPOST'>stringinPOST</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">APST</td><td class="cell">Post Archive Monitors</td><td class="cell">MENU (<a href='#Menu-stringinPOST'>stringinPOST</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Operator-Display-Parameters">Operator Display Parameters</h3>
+
+<p>See <a href="#Fields-Common-to-All-Record-Types">&quot;Fields Common to All Record Types&quot;</a> for more on the record name (NAME) and description (DESC) fields.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">NAME</td><td class="cell">Record Name</td><td class="cell">STRING [61]</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">DESC</td><td class="cell">Descriptor</td><td class="cell">STRING [41]</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Alarm-Parameters">Alarm Parameters</h3>
+
+<p>The string input record has the alarm parameters common to all record types. <a href="#Alarm-Fields">&quot;Alarm Fields&quot;</a> lists other fields related to a alarms that are common to all record types.</p>
+
+<h3 id="Run-time-and-Simulation-Mode-Parameters">Run-time and Simulation Mode Parameters</h3>
+
+<p>The old value field (OVAL) of the string input is used to implement value change monitors for VAL. If VAL is not equal to OVAL, then monitors are triggered.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">OVAL</td><td class="cell">Previous Value</td><td class="cell">STRING [40]</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr></table></blockquote>
+
+<p>The following fields are used to operate the string input in the simulation mode. See <a href="#Simulation-Mode">&quot;Simulation Mode&quot;</a> for more information on simulation mode fields.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">SIOL</td><td class="cell">Sim Input Specifctn</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">SVAL</td><td class="cell">Simulation Value</td><td class="cell">STRING [40]</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">SIML</td><td class="cell">Sim Mode Location</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">SIMM</td><td class="cell">Simulation Mode</td><td class="cell">MENU (<a href='menuYesNo.html'>menuYesNo</a>)</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">SIMS</td><td class="cell">Sim mode Alarm Svrty</td><td class="cell">MENU (<a href='menuAlarmSevr.html'>menuAlarmSevr</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h2 id="Record-Support">Record Support</h2>
+
+<h3 id="Record-Support-Routines">Record Support Routines</h3>
+
+<h4 id="init_record">init_record</h4>
+
+<pre><code>  long (*init_record)(struct dbCommon *precord, int pass)</code></pre>
+
+<p>This routine initializes SIMM with the value of SIML if SIML type is CONSTANT link or creates a channel access link if SIML type is PV_LINK. SVAL is likewise initialized if SIOL is CONSTANT or PV_LINK.</p>
+
+<p>This routine next checks to see that device support is available and a record support read routine is defined. If either does not exist, an error message is issued and processing is terminated.</p>
+
+<p>If device support includes an <code>init_record()</code> routine it is called.</p>
+
+<h4 id="process">process</h4>
+
+<pre><code>  long (*process)(struct dbCommon *precord)</code></pre>
+
+<p>See <a href="#Record-Processing">&quot;Record Processing&quot;</a>.</p>
+
+<h3 id="Record-Processing">Record Processing</h3>
+
+<p>Routine process implements the following algorithm:</p>
+
+<ol>
+
+<li><p>Check to see that the appropriate device support module exists. If it doesn&#39;t, an error message is issued and processing is terminated with the PACT field still set to TRUE. This ensures that processes will no longer be called for this record. Thus error storms will not occur.</p>
+
+</li>
+<li><p>readValue is called. See <a href="#Simulation-Mode">&quot;Simulation Mode&quot;</a> for more information on simulation mode fields and how they affect input.</p>
+
+</li>
+<li><p>If PACT has been changed to TRUE, the device support read routine has started but has not completed reading a new input value. In this case, the processing routine merely returns, leaving PACT TRUE.</p>
+
+</li>
+<li><p><code>recGblGetTimeStamp()</code> is called.</p>
+
+</li>
+<li><p>Check to see if monitors should be invoked.</p>
+
+<ul>
+
+<li><p>Alarm monitors are invoked if the alarm status or severity has changed.</p>
+
+</li>
+<li><p>Archive and value change monitors are invoked if OVAL is not equal to VAL.</p>
+
+</li>
+<li><p>NSEV and NSTA are reset to 0.</p>
+
+</li>
+</ul>
+
+</li>
+<li><p>Scan forward link if necessary, set PACT FALSE, and return.</p>
+
+</li>
+</ol>
+
+
+
+<br>
+<hr>
+<br>
+
+<h2 id="Device-Support">Device Support</h2>
+
+<h3 id="Fields-Of-Interest-To-Device-Support">Fields Of Interest To Device Support</h3>
+
+<p>Each stringin input record must have an associated set of device support routines. The primary responsibility of the device support routines is to obtain a new ASCII string value whenever read_stringin is called. The device support routines are primarily interested in the following fields:</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">PACT</td><td class="cell">Record active</td><td class="cell">UCHAR</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">DPVT</td><td class="cell">Device Private</td><td class="cell">NOACCESS</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">No</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">UDF</td><td class="cell">Undefined</td><td class="cell">UCHAR</td><td class="cell">Yes</td><td class="cell">1</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">VAL</td><td class="cell">Current Value</td><td class="cell">STRING [40]</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">INP</td><td class="cell">Input Specification</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Device-Support-Routines-devSiSoft.c-">Device Support Routines (devSiSoft.c)</h3>
+
+<h4 id="init_record1">init_record</h4>
+
+<pre><code>  long init_record(stringinRecord *prec)</code></pre>
+
+<p>This routine is optional. If provided, it is called by the record support <code>init_record()</code> routine.</p>
+
+<h4 id="read_stringin">read_stringin</h4>
+
+<pre><code>  long read_stringin(stringinRecord *prec)</code></pre>
+
+<p>This routine must provide a new input value. It returns the following values:</p>
+
+<ul>
+
+<li><p>0: Success. A new ASCII string is stored into VAL.</p>
+
+</li>
+<li><p>Other: Error.</p>
+
+</li>
+</ul>
+
+<h3 id="Device-Support-for-Soft-Records">Device Support for Soft Records</h3>
+
+<p>The <code>Soft Channel</code> module places a value directly in VAL.</p>
+
+<p>If the INP link type is constant, the double constant, if non-zero, is converted to a string and stored into VAL by <code>init_record()</code>, and UDF is set to FALSE. If the INP link type is PV_LINK, then dbCaAddInlink is called by <code>init_record()</code>.</p>
+
+<p>read_stringin calls recGblGetLinkValue to read the current value of VAL. See <a href="#Soft-Input">&quot;Soft Input&quot;</a>.</p>
+
+<p>If the return status of recGblGetLinkValue is zero, then read_stringin sets UDF to FALSE. The status of recGblGetLinkValue is returned.</p>
+
+
+
+</div>
+
+</body>
+</html>
+

@@ -17,10 +17,12 @@ classdef F2_CathodeServicesSim < handle
     CCD_name string = "CAMR:LT10:900:" % Prefix of CCD PVs
     STDOUT = 1 % Standard echo output destination
     STDERR = 2 % Standard error output destination
+    QEff=1e-4 % Quantum efficiency for cathode
   end
   properties(SetAccess=private)
     pvs % structure of PV objects
     SimRepRate single {mustBePositive} = 5 % simulated laser rep rate [Hz]
+    pv_context
   end
   properties(SetAccess=private,Hidden)
     wtimer % Timer object attaches here
@@ -28,49 +30,59 @@ classdef F2_CathodeServicesSim < handle
   properties(Constant)
     SimVCC_nbin(1,2) uint16 {mustBePositive} = [656,492] % num x,y bins in image array
     version="1.0"
+    laser_lam = 253e-9 % source laser wavelength [m]
+    clight = 2.99792458e8
+    h = 6.62607004e-34 % plank's constant
+    qe=1.60217662e-19; % electron charge
   end
   
   methods
     function obj = F2_CathodeServicesSim()
       
       % labca setup and formation of PV list
-      lcaSetSeverityWarnLevel(14) ;
-      lcaSetSeverityWarnLevel(4) ;
-      obj.pvs.CCD_stats = PV('pvname',obj.CCD_name+"Stats:"+["EnableCallbacks" "ArrayCallbacks" "ComputeStatistics" "ComputeCentroid"]) ; % PVs to enable stats plugins
-      obj.pvs.CCD_img = PV('pvname',obj.CCD_name+"Image:ArrayData"); % CCD camera image
-      obj.pvs.CCD_counter = PV('pvname',obj.CCD_name+"ArrayCounter_RBV",'monitor',true) ; % Array counter- change triggers CCD image calc
-      obj.pvs.CCD_acqperiod = PV('pvname',obj.CCD_name+"AcquirePeriod") ;
-      obj.pvs.CCD_intensity = PV('pvname',"CAMR:LT10:900:Stats:MaxValue"); % intensity of laser spot on CCD
-      obj.pvs.CCD_spotsize_x = PV('pvname',"CAMR:LT10:900:Stats:SigmaX_mm_RBV"); % Laser spot size (stored in um rms)
-      obj.pvs.CCD_spotsize_y = PV('pvname',"CAMR:LT10:900:Stats:SigmaY_mm_RBV"); % Laser spot size (stored in um rms)
-      obj.pvs.laser_shutterCtrl = PV('pvname',"IOC:SYS1:MP01:MSHUTCTL.RVAL",'monitor',true) ;
-      obj.pvs.laser_shutterStatIn = PV('pvname',"SHUT:LT10:950:IN_MPS") ; % Laser MPS shutter IN status
-      obj.pvs.laser_shutterStatOut = PV('pvname',"SHUT:LT10:950:OUT_MPS") ; % Laser MPS shutter OUT status
-      obj.pvs.laser_telescope = PV('pvname',"LASR:LT10:100:TELE",'monitor',true) ;
-      obj.pvs.laser_reprate = PV('pvname',"LASR:LT10:REPRATE",'monitor',true) ;
-      obj.pvs.CCD_nx = PV('pvname',obj.CCD_name+"ArraySizeX_RBV",'monitor',true); % # x-axis data points in CCD image
-      obj.pvs.CCD_ny = PV('pvname',obj.CCD_name+"ArraySizeY_RBV",'monitor',true); % # y-axis data points in CCD image
-      obj.pvs.CCD_x1 = PV('pvname',obj.CCD_name+"ROI:MinX_mm_RBV"); % ROI limits [um]
-      obj.pvs.CCD_y1 = PV('pvname',obj.CCD_name+"ROI:MinY_mm_RBV"); % ROI limits [um]
-      obj.pvs.CCD_x2 = PV('pvname',obj.CCD_name+"ROI:MaxX_mm_RBV"); % ROI limits [um]
-      obj.pvs.CCD_y2 = PV('pvname',obj.CCD_name+"ROI:MaxY_mm_RBV"); % ROI limits [um]
-      obj.pvs.CCD_res = PV('pvname',obj.CCD_name+"RESOLUTION"); % ROI limits [um]
-      obj.pvs.CCD_xpos = PV('pvname',obj.CCD_name+"Stats:Xpos_RBV",'monitor',true); % xpos on CCD
-      obj.pvs.CCD_ypos = PV('pvname',obj.CCD_name+"Stats:Ypos_RBV",'monitor',true); % ypos on CCD
-      obj.pvs.laser_energy_set = PV('pvname',"LASR:LT10:930:PWR_SET",'monitor',true); % Laser energy setting (uJ)
-      obj.pvs.gun_vacuum = PV('pvname',"VGCC:IN10:113:P",'monitor',true,'conv',1e9);  % Vacuum pressire for gun [nTorr]
-      obj.pvs.laser_energy = PV('pvname',"LASR:LT10:930:PWR"); % Laser energy readout (uJ)
-      obj.pvs.CCD_datatype = PV('pvname',obj.CCD_name+"DataType",'monitor',true); % CCD camera data type
-      obj.pvs.CCD_gain = PV('pvname',obj.CCD_name+"Gain",'monitor',true); % CCD camera image gain factor
-      obj.pvs.lsr_posx = PV('pvname',"MIRR:LT10:770:M2_MOTR_H.RBV",'monitor',true); % X Position readback for laser based on motors
-      obj.pvs.lsr_posy = PV('pvname',"MIRR:LT10:770:M2_MOTR_V.RBV",'monitor',true); % Y Position readback for laser based on motors
-      obj.pvs.lsr_setposx = PV('pvname',"MIRR:LT10:770:M2_MOTR_H",'monitor',true); % X Position set for M2 mirror
-      obj.pvs.lsr_setposy = PV('pvname',"MIRR:LT10:770:M2_MOTR_V",'monitor',true); % Y Position set for M2 mirror
-      obj.pvs.lsr_xaccl = PV('pvname',"MIRR:LT10:770:M2_MOTR_H.ACCL"); % X mirror move acceleration [mm/s/s]
-      obj.pvs.lsr_yaccl = PV('pvname',"MIRR:LT10:770:M2_MOTR_V.ACCL"); % Y mirror move acceleration [mm/s/s]
+%       lcaSetSeverityWarnLevel(14) ;
+%       lcaSetSeverityWarnLevel(4) ;
+      context = PV.Initialize(PVtype.EPICS) ;
+      obj.pvs.CCD_stats = PV(context,'pvname',obj.CCD_name+"Stats:"+["EnableCallbacks" "ArrayCallbacks" "ComputeStatistics" "ComputeCentroid"]) ; % PVs to enable stats plugins
+      obj.pvs.CCD_img = PV(context,'pvname',obj.CCD_name+"Image:ArrayData"); % CCD camera image
+      obj.pvs.CCD_counter = PV(context,'pvname',obj.CCD_name+"ArrayCounter_RBV",'monitor',true) ; % Array counter- change triggers CCD image calc
+      obj.pvs.CCD_acqperiod = PV(context,'pvname',obj.CCD_name+"AcquirePeriod") ;
+      obj.pvs.CCD_intensity = PV(context,'pvname',"CAMR:LT10:900:Stats:MaxValue"); % intensity of laser spot on CCD
+      obj.pvs.CCD_spotsize_x = PV(context,'pvname',"CAMR:LT10:900:Stats:SigmaX_mm_RBV"); % Laser spot size (stored in um rms)
+      obj.pvs.CCD_spotsize_y = PV(context,'pvname',"CAMR:LT10:900:Stats:SigmaY_mm_RBV"); % Laser spot size (stored in um rms)
+      obj.pvs.laser_shutterCtrl = PV(context,'pvname',"IOC:SYS1:MP01:MSHUTCTL.RVAL",'monitor',true) ;
+      obj.pvs.laser_shutterStatIn = PV(context,'pvname',"SHUT:LT10:950:IN_MPS") ; % Laser MPS shutter IN status
+      obj.pvs.laser_shutterStatOut = PV(context,'pvname',"SHUT:LT10:950:OUT_MPS") ; % Laser MPS shutter OUT status
+      obj.pvs.laser_telescope = PV(context,'pvname',"LASR:LT10:100:TELE",'monitor',true) ;
+      obj.pvs.laser_reprate = PV(context,'pvname',"LASR:LT10:REPRATE",'monitor',true) ;
+      obj.pvs.CCD_nx = PV(context,'pvname',obj.CCD_name+"ArraySizeX_RBV",'monitor',true); % # x-axis data points in CCD image
+      obj.pvs.CCD_ny = PV(context,'pvname',obj.CCD_name+"ArraySizeY_RBV",'monitor',true); % # y-axis data points in CCD image
+      obj.pvs.CCD_x1 = PV(context,'pvname',obj.CCD_name+"ROI:MinX_mm_RBV"); % ROI limits [um]
+      obj.pvs.CCD_y1 = PV(context,'pvname',obj.CCD_name+"ROI:MinY_mm_RBV"); % ROI limits [um]
+      obj.pvs.CCD_x2 = PV(context,'pvname',obj.CCD_name+"ROI:MaxX_mm_RBV"); % ROI limits [um]
+      obj.pvs.CCD_y2 = PV(context,'pvname',obj.CCD_name+"ROI:MaxY_mm_RBV"); % ROI limits [um]
+      obj.pvs.CCD_res = PV(context,'pvname',obj.CCD_name+"RESOLUTION"); % ROI limits [um]
+      obj.pvs.CCD_xpos = PV(context,'pvname',obj.CCD_name+"Stats:Xpos_RBV",'monitor',true); % xpos on CCD
+      obj.pvs.CCD_ypos = PV(context,'pvname',obj.CCD_name+"Stats:Ypos_RBV",'monitor',true); % ypos on CCD
+      obj.pvs.laser_energy_set = PV(context,'pvname',"LASR:LT10:930:PWR_SET",'monitor',true); % Laser energy setting (uJ)
+      obj.pvs.gun_vacuum = PV(context,'pvname',"VGCC:IN10:113:P",'monitor',true,'conv',1e9);  % Vacuum pressire for gun [nTorr]
+      obj.pvs.laser_energy = PV(context,'pvname',"LASR:LT10:930:PWR"); % Laser energy readout (uJ)
+      obj.pvs.CCD_datatype = PV(context,'pvname',obj.CCD_name+"DataType",'monitor',true); % CCD camera data type
+      obj.pvs.CCD_gain = PV(context,'pvname',obj.CCD_name+"Gain",'monitor',true); % CCD camera image gain factor
+      obj.pvs.lsr_posx = PV(context,'pvname',"MIRR:LT10:770:M2_MOTR_H.RBV",'monitor',true); % X Position readback for laser based on motors
+      obj.pvs.lsr_posy = PV(context,'pvname',"MIRR:LT10:770:M2_MOTR_V.RBV",'monitor',true); % Y Position readback for laser based on motors
+      obj.pvs.lsr_setposx = PV(context,'pvname',"MIRR:LT10:770:M2_MOTR_H",'monitor',true); % X Position set for M2 mirror
+      obj.pvs.lsr_setposy = PV(context,'pvname',"MIRR:LT10:770:M2_MOTR_V",'monitor',true); % Y Position set for M2 mirror
+      obj.pvs.lsr_xaccl = PV(context,'pvname',"MIRR:LT10:770:M2_MOTR_H.ACCL"); % X mirror move acceleration [mm/s/s]
+      obj.pvs.lsr_yaccl = PV(context,'pvname',"MIRR:LT10:770:M2_MOTR_V.ACCL"); % Y mirror move acceleration [mm/s/s]
+      obj.pvs.fcup_val = PV(context,'pvname',"FARC:IN10:241:VAL"); % Faraday cup reading
+      obj.pvs.torr_val = PV(context,'pvname',"TORR:IN10:1:VAL"); % Torroid charge reading
+      obj.pvs.fcup_stat = PV(context,'pvname',"FARC:IN10:241:PNEUMATIC",'monitor',true); % Faraday cup in/out status
+      obj.pv_context = context ;
       fn=fieldnames(obj.pvs);
       for ifn=1:length(fn)
         obj.pvs.(fn{ifn}).debug = 0 ;
+        caget(obj.pvs.(fn{ifn}));
       end
       
       % Initialize PVs and start internal timer
@@ -114,11 +126,11 @@ classdef F2_CathodeServicesSim < handle
       % Set MPS shutter in/out status
       shutin = caget(obj.pvs.laser_shutterCtrl) ;
       if shutin
-        caput(obj.pvs.laser_shutterStatIn,1);
-        caput(obj.pvs.laser_shutterStatOut,0);
+        caput(obj.pvs.laser_shutterStatIn,'IS_IN');
+        caput(obj.pvs.laser_shutterStatOut,'IS_NOT_OUT');
       else
-        caput(obj.pvs.laser_shutterStatIn,0);
-        caput(obj.pvs.laser_shutterStatOut,1);
+        caput(obj.pvs.laser_shutterStatIn,'IS_NOT_IN');
+        caput(obj.pvs.laser_shutterStatOut,'IS_OUT');
       end
       % Handle laser rep rate change
       reprate = caget(obj.pvs.laser_reprate) ;
@@ -149,7 +161,7 @@ classdef F2_CathodeServicesSim < handle
         waitfor(obj.wtimer);
       catch
       end
-      exit
+      obj.pv_context.close();
     end
     function watchdogStop(obj,~,~) % Actions to take if watchdog timer errors (which it should never do)
       fprintf(obj.STDERR,'%s: timer service crashed, restarting\n',datetime);
@@ -195,10 +207,18 @@ classdef F2_CathodeServicesSim < handle
       dx=x2-x1; dy=y2-y1;
       caput(obj.pvs.CCD_spotsize_x,sx*dx*1e3);
       caput(obj.pvs.CCD_spotsize_y,sy*dy*1e3);
-      % Reshape image to match format experienced on facet-srv
-      img=reshape(img(:),ny,nx);
-      img=rot90(img,3);
       caput(obj.pvs.CCD_img,double(img));
+      % Write charge data to toroids/faraday cup
+      Egam = (obj.h*obj.clight) / obj.laser_lam ; % energy of single laser photon
+      lasE = caget(obj.pvs.laser_energy_set) * 1e-6 ;
+      Nphot = lasE/Egam ;
+      Qb = Nphot * obj.qe * obj.QEff *1e12 ; % Bunch charge / pC
+      if strcmp(caget(obj.pvs.fcup_stat),'IN')
+        caput(obj.pvs.fcup_val,Qb.*(1+randn*0.02)); % pC
+      else
+        caput(obj.pvs.fcup_val,rand.*2); % pC
+      end
+      caput(obj.pvs.torr_val,Qb.*(1+randn*0.02)); % pC
     end
   end
   methods(Hidden,Static)

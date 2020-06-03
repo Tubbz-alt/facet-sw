@@ -1,0 +1,4 @@
+OS-class: Linux
+Target-arch: linux-x86_64
+Tests: arrayOpTest.t analogMonitorTest.t scanEventTest.t regressTest.t
+Files: ../O.Common/recTestIoc.dbd ../arrayOpTest.db ../O.Common/analogMonitorTest.dbd ../analogMonitorTest.db ../O.Common/scanEventTest.dbd ../scanEventTest.db ../O.Common/regressTest.dbd ../regressArray1.db

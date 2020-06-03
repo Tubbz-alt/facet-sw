@@ -6,7 +6,7 @@ classdef CathodeServicesState < uint8
     Standby_cleaninglasermode (1)
     Cleaning_linescan (2)
     Cleaning_movingtonewline (3)
-    QEMap_running (4)
+    QEMap_linescan (4)
     Abort_user (5)
     Abort_watchdog (6)
     Abort_epicswatchdog (7)
@@ -14,31 +14,36 @@ classdef CathodeServicesState < uint8
     Cleaning_testpattern (9)
     Cleaning_setenergypattern (10)
     Cleaning_definearea (11)
+    QEMap_definearea (12)
+    QEMap_movingtonewline (13)
   end
   
   methods
-    function err = iserror(obj)
+    function err = iserror(obj) % Software is in error state for these
       if ismember(uint8(obj),5:8)
         err=true;
       else
         err=false;
       end
     end
-    function isauto = isautopattern(obj)
-      if ismember(uint8(obj),[2 3 4 9 10])
+    function ismap = isqemapstate(obj)
+      ismap = ismember(uint8(obj),[4 12 13]) ;
+    end
+    function isauto = isautopattern(obj) % These states indicate an automatic program is running
+      if ismember(uint8(obj),[2 3 4 9 10 13])
         isauto = true;
       else
         isauto = false;
       end
     end
-    function gunoffstate = isgunoffstate(obj)
-      if ismember(uint8(obj),[1 2 3 9 10])
+    function gunoffstate = isgunoffstate(obj) % Gun RF should be OFF for these
+      if ismember(uint8(obj),[1 2 3 9 10 11])
         gunoffstate=true;
       else
         gunoffstate=false;
       end
     end
-    function txt = text(obj)
+    function txt = text(obj) % 1 line text explanations of states for GUI display purposes
       switch uint8(obj)
         case 0
           txt = "Standby, laser in operations mode (large spot)" ;
@@ -49,7 +54,7 @@ classdef CathodeServicesState < uint8
         case 3
           txt = "Cleaning: moving to new line" ;
         case 4
-          txt = "Running QE Map program" ;
+          txt = "Running QE Map program, scanning line" ;
         case 5
           txt = "Stopped: user abort requested" ;
         case 6
@@ -64,6 +69,10 @@ classdef CathodeServicesState < uint8
           txt = "Cleaning: laser energy setting pattern" ;
         case 11
           txt = "Cleaning: define area to clean" ;
+        case 12
+          txt = "QE Map: define mapping area" ;
+        case 13
+          txt = "QE Map: moving to start of new line to scan" ;
       end
     end
   end

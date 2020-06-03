@@ -1,0 +1,284 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN'
+     'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'>
+
+<html>
+<head>
+<title>String&#x20;Output&#x20;Record&#x20;(stringout)</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link rel='stylesheet' href='style.css' type='text/css'>
+</head>
+<body>
+
+
+
+
+<div class="pod">
+
+<h1 id="String-Output-Record-stringout-">String Output Record (stringout)</h1>
+
+<p>The stringout record is used to write an arbitrary ASCII string of up to 40 characters to other records or software variables.</p>
+
+<h2 id="Parameter-Fields">Parameter Fields</h2>
+
+<p>The record-specific fields are described below, grouped by functionality.</p>
+
+<h3 id="Scan-Parameters">Scan Parameters</h3>
+
+<p>The string output record has the standard fields for specifying under what circumstances it will be processed. These fields are listed in <a href="#Scan-Fields">&quot;Scan Fields&quot;</a>. In addition, <a href="#Scanning-Specification">&quot;Scanning Specification&quot;</a> explains how these fields are used.</p>
+
+<h3 id="Desired-Output-Parameters">Desired Output Parameters</h3>
+
+<p>The string output record must specify from where it gets its desired output string. The first field that determines where the desired output originates is the output mode select (OSML) field, which can have two possible value: <code>closed_loop</code> or <code>supervisory</code>. If <code>supervisory</code> is specified, DOL is ignored, the current value of VAL is written, and the VAL can be changed externally via dbPuts at run-time. If <code>closed_loop</code> is specified, the VAL field&#39;s value is obtained from the address specified in the desired output location field (DOL) which can be either a database link or a channel access link.</p>
+
+<p>DOL can also be a constant in addition to a link, in which case VAL is initialized to the constant value. However, your string constant may be interpreted as a CA link name, so if you want to initialize your string output record, it&#39;s best to use the VAL field. Note that if DOL is a constant, OMSL cannot be <code>closed_loop.</code> See <a href="#Address-Specification">&quot;Address Specification&quot;</a> for information on specifying links.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">VAL</td><td class="cell">Current Value</td><td class="cell">STRING [40]</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">DOL</td><td class="cell">Desired Output Loc</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">OMSL</td><td class="cell">Output Mode Select</td><td class="cell">MENU (<a href='menuOmsl.html'>menuOmsl</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Write-Parameters">Write Parameters</h3>
+
+<p>The output link specified in the OUT field specifies where the string output record is to write its string. The link can be a database or channel access link. If the OUT field is a constant, no output will be written. See <a href="#Address-Specification">&quot;Address Specification&quot;</a> for information on specifying links.</p>
+
+<p>In addition, the appropriate device support module must be entered into the DTYP field.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">OUT</td><td class="cell">Output Specification</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DTYP</td><td class="cell">Device Type</td><td class="cell">DEVICE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Monitor-Parameters">Monitor Parameters</h3>
+
+<p>These parameters are used to specify when the monitor post should be sent by <code>monitor()</code> routine. There are two possible choices:</p>
+
+<h4 id="Menu-stringoutPOST">Menu stringoutPOST</h4>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Index</th><th>Identifier</th><th>Choice String</th></tr>
+<tr>
+<td class='cell DBD_Menu index'>0</td>
+<td class='cell DBD_Menu identifier'>stringoutPOST_OnChange</td>
+<td class='cell DBD_Menu choice'>On Change</td>
+</tr>
+<tr>
+<td class='cell DBD_Menu index'>1</td>
+<td class='cell DBD_Menu identifier'>stringoutPOST_Always</td>
+<td class='cell DBD_Menu choice'>Always</td>
+</tr>
+</table></blockquote>
+
+<p>APST is used for archiver monitors and MPST is for all other type of monitors.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">MPST</td><td class="cell">Post Value Monitors</td><td class="cell">MENU (<a href='#Menu-stringoutPOST'>stringoutPOST</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">APST</td><td class="cell">Post Archive Monitors</td><td class="cell">MENU (<a href='#Menu-stringoutPOST'>stringoutPOST</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Operator-Display-Parameters">Operator Display Parameters</h3>
+
+<p>These parameters are used to present meaningful data to the operator. These fields are used to display the value and other parameters of the string output either textually or graphically.</p>
+
+<p>See <a href="#Fields-Common-to-All-Record-Types">&quot;Fields Common to All Record Types&quot;</a> for more on the record name (NAME) and description (DESC) fields.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">NAME</td><td class="cell">Record Name</td><td class="cell">STRING [61]</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">DESC</td><td class="cell">Descriptor</td><td class="cell">STRING [41]</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Alarm-Parameters">Alarm Parameters</h3>
+
+<p>The possible alarm conditions for the string output record are the SCAN, READ, and INVALID alarms. The severity of the first two is always MAJOR and not configurable.</p>
+
+<p>The IVOA field specifies an action to take when the INVALID alarm is triggered. There are three possible actions:</p>
+
+<h4 id="Menu-menuIvoa">Menu menuIvoa</h4>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Index</th><th>Identifier</th><th>Choice String</th></tr>
+<tr>
+<td class='cell DBD_Menu index'>0</td>
+<td class='cell DBD_Menu identifier'>menuIvoaContinue_normally</td>
+<td class='cell DBD_Menu choice'>Continue normally</td>
+</tr>
+<tr>
+<td class='cell DBD_Menu index'>1</td>
+<td class='cell DBD_Menu identifier'>menuIvoaDon_t_drive_outputs</td>
+<td class='cell DBD_Menu choice'>Don't drive outputs</td>
+</tr>
+<tr>
+<td class='cell DBD_Menu index'>2</td>
+<td class='cell DBD_Menu identifier'>menuIvoaSet_output_to_IVOV</td>
+<td class='cell DBD_Menu choice'>Set output to IVOV</td>
+</tr>
+</table></blockquote>
+
+<p>When <code>Set output to IVOV</code>, the value contained in the IVOV field is written to the output link during an alarm condition. See <a href="#Invalid-Alarm-Output-Action">&quot;Invalid Alarm Output Action&quot;</a> for more information on the IVOA and IVOV fields. <a href="#Alarm-Fields">&quot;Alarm Fields&quot;</a> lists other fields related to a alarms that are common to all record types.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">IVOA</td><td class="cell">INVALID output action</td><td class="cell">MENU (<a href='#Menu-menuIvoa'>menuIvoa</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">IVOV</td><td class="cell">INVALID output value</td><td class="cell">STRING [40]</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Run-time-and-Simulation-Mode-Parameters">Run-time and Simulation Mode Parameters</h3>
+
+<p>The old value field (OVAL) of the string input is used to implement value change monitors for VAL. If VAL is not equal to OVAL, then monitors are triggered.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">OVAL</td><td class="cell">Previous Value</td><td class="cell">STRING [40]</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr></table></blockquote>
+
+<p>The following fields are used to operate the string output in the simulation mode. See <a href="#Simulation-Mode">&quot;Simulation Mode&quot;</a> for more information on these fields.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">SIOL</td><td class="cell">Sim Output Specifctn</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">SIML</td><td class="cell">Sim Mode Location</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">SIMM</td><td class="cell">Simulation Mode</td><td class="cell">MENU (<a href='menuYesNo.html'>menuYesNo</a>)</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">SIMS</td><td class="cell">Sim mode Alarm Svrty</td><td class="cell">MENU (<a href='menuAlarmSevr.html'>menuAlarmSevr</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+
+
+<br>
+<hr>
+<br>
+
+<h2 id="Record-Support">Record Support</h2>
+
+<h3 id="Record-Support-Routines">Record Support Routines</h3>
+
+<h4 id="init_record">init_record</h4>
+
+<pre><code>  long (*init_record)(struct dbCommon *precord, int pass)</code></pre>
+
+<p>This routine initializes SIMM if SIML is a constant or creates a channel access link if SIML is PV_LINK. If SIOL is PV_LINK a channel access link is created.</p>
+
+<p>This routine next checks to see that device support is available. The routine next checks to see if the device support write routine is defined. If either device support or the device support write routine does not exist, an error message is issued and processing is terminated.</p>
+
+<p>If DOL is a constant, then the type double constant, if non-zero, is converted to a string and stored into VAL and UDF is set to FALSE. If DOL type is a PV_LINK then dbCaAddInlink is called to create a channel access link.</p>
+
+<p>If device support includes <code>init_record()</code>, it is called.</p>
+
+<h4 id="process">process</h4>
+
+<pre><code>  long (*process)(struct dbCommon *precord)</code></pre>
+
+<p>See <a href="#Record-Processing">&quot;Record Processing&quot;</a>.</p>
+
+<h3 id="Record-Processing">Record Processing</h3>
+
+<p>Routine process implements the following algorithm:</p>
+
+<ol>
+
+<li><p>Check to see that the appropriate device support module exists. If it doesn&#39;t, an error message is issued and processing is terminated with the PACT field still set to TRUE. This ensures that processes will no longer be called for this record. Thus error storms will not occur.</p>
+
+</li>
+<li><p>If PACT is FALSE and OMSL is CLOSED_LOOP, recGblGetLinkValue is called to read the current value of VAL. See <a href="#Soft-Output">&quot;Soft Output&quot;</a>. If the return status of recGblGetLinkValue is zero then UDF is set to FALSE.</p>
+
+</li>
+<li><p>Check severity and write the new value. See <a href="#Simulation-Mode">&quot;Simulation Mode&quot;</a> and <a href="#Invalid-Alarm-Output-Action">&quot;Invalid Alarm Output Action&quot;</a> for details on how the simulation mode and the INVALID alarm conditions affect output.</p>
+
+</li>
+<li><p>If PACT has been changed to TRUE, the device support write output routine has started but has not completed writing the new value. In this case, the processing routine merely returns, leaving PACT TRUE.</p>
+
+</li>
+<li><p>Check to see if monitors should be invoked.</p>
+
+<ul>
+
+<li><p>Alarm monitors are invoked if the alarm status or severity has changed.</p>
+
+</li>
+<li><p>Archive and value change monitors are invoked if OVAL is not equal to VAL.</p>
+
+</li>
+<li><p>NSEV and NSTA are reset to 0.</p>
+
+</li>
+</ul>
+
+</li>
+<li><p>Scan forward link if necessary, set PACT FALSE, and return.</p>
+
+</li>
+</ol>
+
+
+
+<br>
+<hr>
+<br>
+
+<h2 id="Device-Support">Device Support</h2>
+
+<h3 id="Fields-Of-Interest-To-Device-Support">Fields Of Interest To Device Support</h3>
+
+<p>Each stringout output record must have an associated set of device support routines. The primary responsibility of the device support routines is to write a new value whenever write_stringout is called. The device support routines are primarily interested in the following fields:</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">PACT</td><td class="cell">Record active</td><td class="cell">UCHAR</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">DPVT</td><td class="cell">Device Private</td><td class="cell">NOACCESS</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">No</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">NSEV</td><td class="cell">New Alarm Severity</td><td class="cell">MENU (<a href='menuAlarmSevr.html'>menuAlarmSevr</a>)</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">NSTA</td><td class="cell">New Alarm Status</td><td class="cell">MENU (<a href='menuAlarmStat.html'>menuAlarmStat</a>)</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">VAL</td><td class="cell">Current Value</td><td class="cell">STRING [40]</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">Yes</td></tr><tr><td class="cell">OUT</td><td class="cell">Output Specification</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Device-Support-Routines-devSoSoft.c-">Device Support Routines (devSoSoft.c)</h3>
+
+<h4 id="write_stringout">write_stringout</h4>
+
+<pre><code>  long write_stringout(stringoutRecord *prec)</code></pre>
+
+<p>This routine must output a new value. It returns the following values:</p>
+
+<ul>
+
+<li><p>0: Success.</p>
+
+</li>
+<li><p>Other: Error.</p>
+
+</li>
+</ul>
+
+<h3 id="Device-Support-for-Soft-Records">Device Support for Soft Records</h3>
+
+<p>The <code>Soft Channel</code> device support module writes the current value of VAL.</p>
+
+<p>If the OUT link type is PV_LINK, then dbCaAddInlink is called by <code>init_record()</code>.</p>
+
+<p>write_so calls recGblPutLinkValue to write the current value of VAL. See <a href="#Soft-Output">&quot;Soft Output&quot;</a>.</p>
+
+
+
+</div>
+
+</body>
+</html>
+

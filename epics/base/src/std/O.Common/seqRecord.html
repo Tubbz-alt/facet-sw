@@ -1,0 +1,218 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN'
+     'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'>
+
+<html>
+<head>
+<title>Sequence&#x20;Record&#x20;(seq)</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link rel='stylesheet' href='style.css' type='text/css'>
+</head>
+<body>
+
+
+
+
+<div class="pod">
+
+<h1 id="Sequence-Record-seq-">Sequence Record (seq)</h1>
+
+<p>The Sequence record is used to trigger the processing of up to ten other records and send values to those records. It is similar to the fanout record, except that it will fetch an input value and write an output value instead of simply processing a collection of forward links. It can also specify one of several selection algorithms that determine which values to write. It has no associated device support.</p>
+
+<h2 id="Parameter-Fields">Parameter Fields</h2>
+
+<p>The record-specific fields are described below, grouped by functionality.</p>
+
+<h3 id="Scan-Parameters">Scan Parameters</h3>
+
+<p>The sequence record has the standard fields for specifying under what circumstances it will be processed. These fields are listed in <a href="#Scan-Fields">&quot;Scan Fields&quot;</a>. In addition, <a href="#Scanning-Specification">&quot;Scanning Specification&quot;</a> explains how these fields are used.</p>
+
+<h3 id="Desired-Output-Parameters">Desired Output Parameters</h3>
+
+<p>These fields determine where the record retrieves the values it is to write to other records. All of these values are not necessarily used, depending on the selection algorithm.</p>
+
+<p>The sequence record can retrieve up to 16 values from 16 locations. The user specifies the locations in the Desired Output Link fields (DOL0-DOLF), which can be either constants, database links, or channel access links. If a Desired Output Link is a constant, the corresponding value field for that link is initialized to the constant value and &#39;&#39;cannot&#39;&#39; be changed via dbputs. Otherwise, if the Desired Output Link is a database or channel access link, a value is fetched from the link each time the record is processed (provided that the output link is part of the record&#39;s selection algorithm). See <a href="#Address-Specification">&quot;Address Specification&quot;</a> for information on how to specify database links.</p>
+
+<p>The value fetched from the Desired Output Links are stored in the corresponding Desired Output Value fields (DO0-DOF). These fields can be initialized to a constant value, but they cannot be changed via dbPuts.</p>
+
+<h4 id="Desired-Output-Link-Fields">Desired Output Link Fields</h4>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">DOL0</td><td class="cell">Input link 0</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOL1</td><td class="cell">Input link1</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOL2</td><td class="cell">Input link 2</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOL3</td><td class="cell">Input link 3</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOL4</td><td class="cell">Input link 4</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOL5</td><td class="cell">Input link 5</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOL6</td><td class="cell">Input link 6</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOL7</td><td class="cell">Input link 7</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOL8</td><td class="cell">Input link 8</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOL9</td><td class="cell">Input link 9</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOLA</td><td class="cell">Input link 10</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOLB</td><td class="cell">Input link 11</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOLC</td><td class="cell">Input link 12</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOLD</td><td class="cell">Input link 13</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOLE</td><td class="cell">Input link 14</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOLF</td><td class="cell">Input link 15</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h4 id="Desired-Output-Value-Fields">Desired Output Value Fields</h4>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">DO0</td><td class="cell">Value 0</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DO1</td><td class="cell">Value 1</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DO2</td><td class="cell">Value 2</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DO3</td><td class="cell">Value 3</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DO4</td><td class="cell">Value 4</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DO5</td><td class="cell">Value 5</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DO6</td><td class="cell">Value 6</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DO7</td><td class="cell">Value 7</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DO8</td><td class="cell">Value 8</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DO9</td><td class="cell">Value 9</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOA</td><td class="cell">Value 10</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOB</td><td class="cell">Value 11</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOC</td><td class="cell">Value 12</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOD</td><td class="cell">Value 13</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOE</td><td class="cell">Value 14</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DOF</td><td class="cell">Value 15</td><td class="cell">DOUBLE</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Output-Parameters">Output Parameters</h3>
+
+<p>When the record is processed, the desired output values are retrieved for the links in the record&#39;s selection algorithm and are written to the corresponding output link (LNK0-LNKF). These output links can be database links or channel access links; they cannot be device addresses. There are sixteen output links, one for each desired output link. Only those that are defined are used.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">LNK0</td><td class="cell">Output Link 0</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNK1</td><td class="cell">Output Link 1</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNK2</td><td class="cell">Output Link 2</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNK3</td><td class="cell">Output Link 3</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNK4</td><td class="cell">Output Link 4</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNK5</td><td class="cell">Output Link 5</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNK6</td><td class="cell">Output Link 6</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNK7</td><td class="cell">Output Link 7</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNK8</td><td class="cell">Output Link 8</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNK9</td><td class="cell">Output Link 9</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNKA</td><td class="cell">Output Link 10</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNKB</td><td class="cell">Output Link 11</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNKC</td><td class="cell">Output Link 12</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNKD</td><td class="cell">Output Link 13</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNKE</td><td class="cell">Output Link 14</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">LNKF</td><td class="cell">Output Link 15</td><td class="cell">OUTLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Selection-Algorithm-Parameters">Selection Algorithm Parameters</h3>
+
+<p>When the sequence record is processed, it uses a selection algorithm similar to that of the selection record to decide which links to process.The select mechanism field (SELM) has three algorithms to choose from: <code>All</code>, <code>&lt;&lt;Specified </code>&gt;&gt; or <code>Mask</code>.</p>
+
+<h4 id="Record-fields-related-to-the-Selection-Algorithm">Record fields related to the Selection Algorithm</h4>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">SELM</td><td class="cell">Select Mechanism</td><td class="cell">MENU (<a href='#Menu-seqSELM'>seqSELM</a>)</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">SELN</td><td class="cell">Link Selection</td><td class="cell">USHORT</td><td class="cell">No</td><td class="cell">1</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">SELL</td><td class="cell">Link Selection Loc</td><td class="cell">INLINK</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">SHFT</td><td class="cell">Shift for Mask mode</td><td class="cell">SHORT</td><td class="cell">Yes</td><td class="cell">-1</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">OFFS</td><td class="cell">Offset for Specified</td><td class="cell">SHORT</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h4 id="Fields-Description">Fields Description</h4>
+
+<p><b>SELM - Selection Mode</b></p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Index</th><th>Identifier</th><th>Choice String</th></tr>
+<tr>
+<td class='cell DBD_Menu index'>0</td>
+<td class='cell DBD_Menu identifier'>seqSELM_All</td>
+<td class='cell DBD_Menu choice'>All</td>
+</tr>
+<tr>
+<td class='cell DBD_Menu index'>1</td>
+<td class='cell DBD_Menu identifier'>seqSELM_Specified</td>
+<td class='cell DBD_Menu choice'>Specified</td>
+</tr>
+<tr>
+<td class='cell DBD_Menu index'>2</td>
+<td class='cell DBD_Menu identifier'>seqSELM_Mask</td>
+<td class='cell DBD_Menu choice'>Mask</td>
+</tr>
+</table></blockquote>
+
+<p>See <a href="#Selection-Algorithms-Description">&quot;Selection Algorithms Description&quot;</a> below;</p>
+
+<p><b>SELL - Link Selection Location</b></p>
+
+<p>This field can be initialized as a CONSTANT or as a LINK to any other record. SELN will fetch its value from this field when the seq record is processed. Thus, when using <i>Mask</i> or <i>Specified</i> modes, the links that seq will process can be dinamically changed by the record pointed by SELL.</p>
+
+<p><b>SELN - Link Selection</b></p>
+
+<p>When <b><code>SELM = Specified</code></b> this is the index number of the link that will be processed, used in combination with the <code>OFFS</code> field:</p>
+
+<pre><code>  SELN = SELN + OFFS</code></pre>
+
+<p><i>(By default, the OFFS is initalized to ZERO)</i></p>
+
+<p>When <b><code>SELM = Mask</code></b> this field is the bitmask that will be used to determine which links will be processed by the seq record, in combination with the <code>SHFT</code> field:</p>
+
+<pre><code>  if (SHFT &gt;= 0)
+    SELN = SELN &lt;&lt; -SHFT
+  else
+    SELN = SELN &gt;&gt; SHFT</code></pre>
+
+<p><i>(By default, the SHFT is initalized to -1)</i></p>
+
+<h4 id="Note-about-SHFT-and-OFFS-fields"><b>Note about SHFT and OFFS fields</b></h4>
+
+<p>The first versions of seq record had DO, DOL, LNK and DLY fields starting with index ONE (DO1, DOL1, LNK1 and DLY1). New version of the seq record now supports 16 links, starting by index ZERO (DO0, DOL0, LNK0 and DLY0). The SHFT and OFFS fields were introduced to keep compatibility of old databases that used seq record with its links indexed from one onwards.</p>
+
+<p><b>If one wants to use DO0, DOL0, LNK0, DLY0 fields when SELM = Mask, SHFT field must be set to ZERO</b></p>
+
+<h4 id="Selection-Algorithms-Description">Selection Algorithms Description</h4>
+
+<p><b>All</b></p>
+
+<p>The <code>All</code> algorithm causes the record to process each input and output link each time the record is processed, in order from 0 to 15. So when SELM is <code>All</code>, the desired output value from DOL0 will fetched and sent to LNK0, then the desired output value from DOL1 will be fetched and sent to the location in LNK1, and so on until the last input and output link DOF and LNKF. (Note that undefined links are not used.) If DOL<i>x</i> is a constant, the current value field is simply used and the desired output link is ignored. The SELN field is not used when <code>All</code> is the algorithm.</p>
+
+<p><b>Specified</b></p>
+
+<p>When the <code>Specified</code> algorithm is chosen, each time the record is processed it gets the integer value in the Link Selection (SELN) field and uses that as the index of the link to process. For instance, if SELN is 4, the desired output value from DO4 will be retrieved and sent to LNK4. If DOL<i>x</i> is a constant, DO<i>x</i> is simply used without the value being fetched from the input link.</p>
+
+<p><b>Mask</b></p>
+
+<p>When <code>Mask</code> is chosen, the record uses the individual bits of the SELN field to determine the links to process. When bit 0 of SELN is set, the value from DO0 will be written to the location in LNK0; when bit 1 is set, the valud from DO1 will be written to the location in LNK1 etc. Thus for example if SELN is 3, the record will retrieve the values from DO0 and DO1 and write them to the locations in LNK0 and LNK1, respectively. If SELN is 63, DO0...DO5 will be written to LNK0...LNK5.</p>
+
+<h3 id="Delay-Parameters">Delay Parameters</h3>
+
+<p>The delay parameters consist of 16 fields, one for each I/O link discussed above. These fields can be configured to cause the record to delay processing the link. For instance, if the user gives the DLY1 field a value of 3.0, each time the record is processed at run-time, the record will delay processing the DOL1, DOV1, and LNK1 fields for three seconds. That is, the desired output value will not be fetched and written to the output link until three seconds have lapsed.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">DLY0</td><td class="cell">Delay 0</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLY1</td><td class="cell">Delay 1</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLY2</td><td class="cell">Delay 2</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLY3</td><td class="cell">Delay 3</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLY4</td><td class="cell">Delay 4</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLY5</td><td class="cell">Delay 5</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLY6</td><td class="cell">Delay 6</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLY7</td><td class="cell">Delay 7</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLY8</td><td class="cell">Delay 8</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLY9</td><td class="cell">Delay 9</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLYA</td><td class="cell">Delay 10</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLYB</td><td class="cell">Delay 11</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLYC</td><td class="cell">Delay 12</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLYD</td><td class="cell">Delay 13</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLYE</td><td class="cell">Delay 14</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">DLYF</td><td class="cell">Delay 15</td><td class="cell">DOUBLE</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Operator-Display-Parameters">Operator Display Parameters</h3>
+
+<p>These parameters are used to present meaningful data to the operator. The Precision field (PREC) determines the decimal precision for the VAL field when it is displayed. It is used when the <code>get_precision</code> record routine is called.</p>
+
+<p>See <a href="#Fields-Common-to-All-Record-Types">&quot;Fields Common to All Record Types&quot;</a> for more on the record name (NAME) and description (DESC) fields.</p>
+
+
+
+<blockquote><table border="1"><tr>
+<th>Field</th><th>Summary</th><th>Type</th><th>DCT</th>
+<th>Default</th><th>Read</th><th>Write</th><th>CA PP</th>
+</tr>
+<tr><td class="cell">PREC</td><td class="cell">Display Precision</td><td class="cell">SHORT</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr><tr><td class="cell">NAME</td><td class="cell">Record Name</td><td class="cell">STRING [61]</td><td class="cell">No</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">No</td><td class="cell">No</td></tr><tr><td class="cell">DESC</td><td class="cell">Descriptor</td><td class="cell">STRING [41]</td><td class="cell">Yes</td><td class="cell">&nbsp;</td><td class="cell">Yes</td><td class="cell">Yes</td><td class="cell">No</td></tr></table></blockquote>
+
+<h3 id="Alarm-Parameters">Alarm Parameters</h3>
+
+<p>The sequence record has the alarm parameters common to all record types. <a href="#Alarm-Fields">&quot;Alarm Fields&quot;</a> lists other fields related to a alarms that are common to all record types.</p>
+
+<h2 id="Record-Support">Record Support</h2>
+
+<h3 id="Record-Processing">Record Processing</h3>
+
+<p>Routine process implements the following algorithm:</p>
+
+<ol>
+
+<li><p>First, PACT is set to TRUE, and the link selection is fetched. Depending on the selection mechanism, the link selection output links are processed in order from LNK0 to LNKF. When LNK<i>x</i> is processed, the corresponding DLY<i>x</i> value is used to generate a delay via watchdog timer.</p>
+
+</li>
+<li><p>After DLY<i>x</i> seconds have expired, the input value is fetched from DO<i>x</i> (if DOL<i>x</i> is constant) or DOL<i>x</i> (if DOL<i>x</i> is a database link or channel access link) and written to LNK<i>x</i>.</p>
+
+</li>
+<li><p>When all links are completed, an asynchronous completion call back to dbProcess is made (see the Application Developer&#39;s Guide for more information on asynchronous processing.)</p>
+
+</li>
+<li><p>Then UDF is set to FALSE.</p>
+
+</li>
+<li><p>Monitors are checked.</p>
+
+</li>
+<li><p>The forward link is scanned, PACT is set FALSE, and the process routine returns.</p>
+
+</li>
+</ol>
+
+<p>For the delay mechanism to operate properly, the record is processed asynchronously. The only time the record will not be processed asynchronously is when there are no non-NULL output links selected (i.e. when it has nothing to do.) The processing of the links is done via callback tasks at the priority set in the PRIO field in dbCommon (see the Application Developer&#39;s Guide for more information on call</p>
+
+
+
+</div>
+
+</body>
+</html>
+
