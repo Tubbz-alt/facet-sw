@@ -1,5 +1,9 @@
 classdef PV < handle
   % PV Control system process variable info, access methods and GUI links
+  %  Supports integration with Matlab App Designer GUI
+  %
+  %  Supported App Designer objects are:
+  %    Lamp, ToggleSwitch, Switch, RockerSwitch, NumericEditField, LinearGauge, Gauge, NinetyDegreeGuage, SemicircularGauge, StateButton
  
   events
     PVStateChange % notifies upon successfull fetching of new PV value
@@ -12,7 +16,6 @@ classdef PV < handle
     debug uint8 {mustBeMember(debug,[0,1,2])} = 2 % 0=live, 1=read only, 2=no connection
     units string = "none" % User specified units
     conv double % Scalar Conversion factor PV -> reported value or vector of polynomial coefficients (for use with polyval)
-    guihan = 0 % gui handle to assoicate with this PV (e.g. to write out a variable or control a switch etc) (can be vector of handles)
     val cell % Last read value (can be any type and length depending on number and type of linked pvname PVs)
 %     guiprec uint8 = 3 % Precision (significant figures) to use for GUI displays
     limits double {mustBeNumeric, mustBeGoodLimits(limits)} % Numerical upper/lower bounds for PV numeric values
@@ -25,6 +28,9 @@ classdef PV < handle
     timeout double {mustBePositive} = 3 % timout in s for waiting for a new value asynchrounously
     RunStartDelay = 3 % Wait this long after issuing Run method command to start polling of PVs (e.g. to allow startup scripts to complete)
   end
+  properties(SetObservable)
+    guihan = 0 % gui handle to assoicate with this PV (e.g. to write out a variable or control a switch etc) (can be vector of handles)
+  end
   properties(SetAccess=protected)
     pvdatatype % Data type used by java channel access client (set on constuction to force, else use default determined from control system) can be cell array of length pvname or scalar java class
     mode string = "r" % Access mode: "r", or "rw"
@@ -32,6 +38,9 @@ classdef PV < handle
     utimer % Holder for update timer object
     context % EPICS java ca client context object (needs to be passed to contructor)
     channel cell % ca channel(s) for provided pvname(s)
+  end
+  properties(SetAccess=protected,Hidden)
+    ContextMenu % Gets called on GUI right-click
   end
   properties(Access=private)
     lastlims % last limits value
@@ -60,20 +69,41 @@ classdef PV < handle
           obj.(lower(varargin{iarg-1}))=varargin{iarg};
         end
       end
-      % Loop through provided args again and take any action that requires
-      % full set of parameters set first
-      if nargin>1
-        for iarg=2:2:nargin
-          if strcmp(varargin{iarg-1},"mode")
-            SetMode(obj,varargin{iarg});
-          end
+      % Execute SetMode method to register callback handles/perform 1 time GUI tasks
+      SetMode(obj,obj.mode);
+    end
+    function set.guihan(obj,han)
+      for ihan=1:length(han)
+        if ~ishandle(han(ihan))
+          error('Not a valid GUI handle!');
         end
       end
+      % Create tooltip and right-click context menus for this GUI object
+      pvstr="";
+      for ipv=1:length(obj.pvname)
+        pvstr=pvstr+" "+obj.pvname(ipv);
+      end
+      pvstr="PV: "+pvstr;
+      for ihan=1:length(han)
+        han(ihan).Tooltip=pvstr;
+      end
+      % Callback menu
+%       cm = uicontextmenu ;
+%       m1=uimenu(cm,'Text','PV Info');
+%       m1.Tag='pvinfo';
+%       m1.MenuSelectedFcn=@(source,event) obj.ContextMenuCallback(source,event);
+%       for ihan=1:length(han)
+%         han(ihan).ContextMenu = cm ;
+%       end
+%       obj.ContextMenu = cm ;
+      obj.guihan=han;
+      obj.SetMode(obj.mode); % execute any r/rw mode difference actions
     end
     function SetMode(obj,mode)
       %MODE Read/write mode for interface with GUIs
+      % read/read-write settings
       mode=string(mode);
-      if ~isempty(obj.guihan)
+      if ~isequal(obj.guihan,0)
         switch mode
           case "r"
           case "rw"
@@ -240,28 +270,60 @@ classdef PV < handle
       nvals=length(obj.val);
       lims=obj.limits;
       pvl=obj.pvlogic;
-      for ihan=1:length(obj.guihan) % Loop over all linked handles
-        h=obj.guihan(ihan);
-        if h==0 || ~ishandle(h); continue; end
-        if isequal(lastval,obj.val) && isequal(lims,obj.lastlims); continue; end % loop if values haven't changed
-        switch class(h)
-          case 'matlab.ui.control.Lamp' % set lamp to green if all associated PVs evaluate to true ('ON', 'YES', or >0), else red
-            negate=false;
-            if pvl(1)=='~'
-              negate=true;
-              if length(pvl)>1; pvl=pvl(2:end); end
-            end
-            on=nan(1,nvals);
-            for ival=1:nvals
-              if strcmpi(obj.val{ival},'ON') || strcmpi(obj.val{ival},'YES') || strcmpi(obj.val{ival},'IN') || (isnumeric(obj.val{ival}) && obj.val{ival}>0)
-                on(ival)=1;
-              elseif strcmpi(obj.val{ival},'OFF') || strcmpi(obj.val{ival},'NO') || strcmpi(obj.val{ival},'OUT') || ~(isnumeric(obj.val{ival}) && obj.val{ival}>0)
-                on(ival)=0;
+      if ~isequal(obj.guihan,0)
+        for ihan=1:length(obj.guihan) % Loop over all linked handles
+          h=obj.guihan(ihan);
+          if h==0 || ~ishandle(h); continue; end
+          if isequal(lastval,obj.val) && isequal(lims,obj.lastlims); continue; end % loop if values haven't changed
+          switch class(h)
+            case 'matlab.ui.control.Lamp' % set lamp to green if all associated PVs evaluate to true ('ON', 'YES', or >0), else red
+              negate=false;
+              if pvl(1)=='~'
+                negate=true;
+                if length(pvl)>1; pvl=pvl(2:end); end
               end
-            end
-            if any(isnan(on))
-              h.Color=obj.guiprefs.guiLampCol{3};
-            else
+              on=nan(1,nvals);
+              for ival=1:nvals
+                if strcmpi(obj.val{ival},'ON') || strcmpi(obj.val{ival},'YES') || strcmpi(obj.val{ival},'IN') || (isnumeric(obj.val{ival}) && obj.val{ival}>0)
+                  on(ival)=1;
+                elseif strcmpi(obj.val{ival},'OFF') || strcmpi(obj.val{ival},'NO') || strcmpi(obj.val{ival},'OUT') || ~(isnumeric(obj.val{ival}) && obj.val{ival}>0)
+                  on(ival)=0;
+                end
+              end
+              if any(isnan(on))
+                h.Color=obj.guiprefs.guiLampCol{3};
+              else
+                if nvals>1
+                  for ival=2:nvals
+                    if strcmp(pvl,'|')
+                      on(1) = on(1) | on(ival) ;
+                    elseif strcmp(pvl,'XOR')
+                      on(1) = xor(on(1),on(ival)) ;
+                    else
+                      on(1) = on(1) & on(ival) ;
+                    end
+                  end
+                end
+              end
+              if negate; on=~on; end
+              if on(1)
+                h.Color=obj.guiprefs.guiLampCol{2};
+              else
+                h.Color=obj.guiprefs.guiLampCol{1};
+              end
+            case {'matlab.ui.control.ToggleSwitch','matlab.ui.control.Switch','matlab.ui.control.RockerSwitch'} % set lower toggle value if 'OFF' or 0 or 'NO'
+              negate=false;
+              if pvl(1)=='~'
+                negate=true;
+                if length(pvl)>1; pvl=pvl(2:end); end
+              end
+              on=false(1,nvals);
+              for ival=1:nvals
+                if strcmpi(obj.val{ival},'ON') || strcmpi(obj.val{ival},'YES') || strcmpi(obj.val{ival},'IN') || (isnumeric(obj.val{ival}) && obj.val{ival}>0)
+                  on(ival)=true;
+                end
+              end
+              if negate; on=~on; end
               if nvals>1
                 for ival=2:nvals
                   if strcmp(pvl,'|')
@@ -273,136 +335,112 @@ classdef PV < handle
                   end
                 end
               end
-            end
-            if negate; on=~on; end
-            if on(1)
-              h.Color=obj.guiprefs.guiLampCol{2};
-            else
-              h.Color=obj.guiprefs.guiLampCol{1};
-            end
-          case {'matlab.ui.control.ToggleSwitch','matlab.ui.control.Switch','matlab.ui.control.RockerSwitch'} % set lower toggle value if 'OFF' or 0 or 'NO'
-            negate=false;
-            if pvl(1)=='~'
-              negate=true;
-              if length(pvl)>1; pvl=pvl(2:end); end
-            end
-            on=false(1,nvals);
-            for ival=1:nvals
-              if strcmpi(obj.val{ival},'ON') || strcmpi(obj.val{ival},'YES') || strcmpi(obj.val{ival},'IN') || (isnumeric(obj.val{ival}) && obj.val{ival}>0)
-                on(ival)=true;
-              end
-            end
-            if negate; on=~on; end
-            if nvals>1
-              for ival=2:nvals
-                if strcmp(pvl,'|')
-                  on(1) = on(1) | on(ival) ;
-                elseif strcmp(pvl,'XOR')
-                  on(1) = xor(on(1),on(ival)) ;
+              if isempty(h.ItemsData)
+                if on(1)
+                  h.Value=h.Items{2};
                 else
-                  on(1) = on(1) & on(ival) ;
+                  h.Value=h.Items{1};
+                end
+              else
+                if on(1)
+                  h.Value=h.ItemsData{2};
+                else
+                  h.Value=h.ItemsData{1};
                 end
               end
-            end
-            if isempty(h.ItemsData)
+            case 'matlab.ui.control.NumericEditField' % Write PV value to edit field
+              % If limits have been changed, update GUI field limits also
+              % only apply limits to editable fields
+              if strcmp(h.Editable,'on') && ~isempty(lims) && ~isequal(lims,obj.lastlims)
+                h.Limits=double(lims);
+              end
+              % Deal with multiple PV channels linked to this object
+              if length(obj.val)>1
+                if strcmpi(obj.pvlogic,'MAX')
+                  hval=-inf;
+                elseif strcmpi(obj.pvlogic,'MIN')
+                  hval=inf;
+                else
+                  hval=0;
+                end
+                for ival=1:length(obj.val)
+                  if strcmpi(obj.pvlogic,'MAX') && obj.val{ival}>hval
+                    hval=obj.val{ival};
+                  elseif strcmpi(obj.pvlogic,'MIN') && obj.val{ival}<hval
+                    hval=obj.val{ival};
+                  elseif strcmpi(obj.pvlogic,'SUM')
+                    hval=hval+obj.val{ival};
+                  else
+                    hval=obj.val{1};
+                  end
+                end
+              else
+                hval=obj.val{1};
+              end
+              h.Value=hval;
+              % Make app element non-editable if rw mode not enabled
+              if obj.mode~="rw"
+                h.Editable=false;
+              else
+                h.Editable=true;
+              end
+              if ~isempty(lims)
+                if hval<lims(1) || hval>lims(2)
+                  h.BackgroundColor=obj.errcol;
+                elseif h.Editable
+                  h.BackgroundColor=[1 1 1];
+                else
+                  h.BackgroundColor=[0 0 0];
+                end
+              end
+            case {'matlab.ui.control.LinearGauge','matlab.ui.control.Gauge','matlab.ui.control.NinetyDegreeGauge','matlab.ui.control.SemicircularGauge'}
+              % If limits have been changed, update GUI field limits and coloring also
+              if ~isempty(lims) && ~isequal(lims,obj.lastlims)
+                ext=obj.guiprefs.gaugeLimitExtension;
+                rng=range(lims);
+                scalelims=[lims(1)-rng*ext(1),lims(1);lims(1),lims(2);lims(2),lims(2)+rng*ext(2)];
+                h.Limits=double([min(scalelims(:)),max(scalelims(:))]);
+                h.ScaleColors=obj.guiprefs.gaugeCol;
+                h.ScaleColorLimits=double(scalelims);
+              end
+              h.Value=obj.val{1};
+              if ~isempty(lims)
+                if obj.val{1}<lims(1) || obj.val{1}>lims(2)
+                  h.BackgroundColor=obj.errcol;
+                else
+                  h.BackgroundColor=[1 1 1];
+                end
+              end
+            case 'matlab.ui.control.StateButton'
+              on=false(1,nvals);
+              negate=false;
+              if pvl(1)=='~'
+                negate=true;
+                if length(pvl)>1; pvl=pvl(2:end); end
+              end
+              for ival=1:nvals
+                if strcmpi(obj.val{ival},'ON') || strcmpi(obj.val{ival},'YES') || strcmpi(obj.val{ival},'IN') || (isnumeric(obj.val{ival}) && obj.val{ival}>0)
+                  on(ival)=true;
+                end
+              end
+              if negate; on=~on; end
+              if nvals>1
+                for ival=2:nvals
+                  if strcmp(pvl,'|')
+                    on(1) = on(1) | on(ival) ;
+                  elseif strcmp(pvl,'XOR')
+                    on(1) = xor(on(1),on(ival)) ;
+                  else
+                    on(1) = on(1) & on(ival) ;
+                  end
+                end
+              end
               if on(1)
-                h.Value=h.Items{2};
+                h.Value=true;
               else
-                h.Value=h.Items{1};
+                h.Value=false;
               end
-            else
-              if on(1)
-                h.Value=h.ItemsData{2};
-              else
-                h.Value=h.ItemsData{1};
-              end
-            end
-          case 'matlab.ui.control.NumericEditField' % Write PV value to edit field
-            % If limits have been changed, update GUI field limits also
-            % only apply limits to editable fields
-            if strcmp(h.Editable,'on') && ~isempty(lims) && ~isequal(lims,obj.lastlims)
-              h.Limits=double(lims);
-            end
-            % Deal with multiple PV channels linked to this object
-            if length(obj.val)>1
-              if strcmpi(obj.pvlogic,'MAX')
-                hval=-inf;
-              elseif strcmpi(obj.pvlogic,'MIN')
-                hval=inf;
-              else
-                hval=0;
-              end
-              for ival=1:length(obj.val)
-                if strcmpi(obj.pvlogic,'MAX') && obj.val{ival}>hval
-                  hval=obj.val{ival};
-                elseif strcmpi(obj.pvlogic,'MIN') && obj.val{ival}<hval
-                  hval=obj.val{ival};
-                elseif strcmpi(obj.pvlogic,'SUM')
-                  hval=hval+obj.val{ival};
-                else
-                  hval=obj.val{1};
-                end
-              end
-            else
-              hval=obj.val{1};
-            end
-            h.Value=hval;
-            if ~isempty(lims)
-              if hval<lims(1) || hval>lims(2)
-                h.BackgroundColor=obj.errcol;
-              elseif h.Editable
-                h.BackgroundColor=[1 1 1];
-              else
-                h.BackgroundColor=[0 0 0];
-              end
-            end
-          case {'matlab.ui.control.LinearGauge','matlab.ui.control.Gauge','matlab.ui.control.NinetyDegreeGauge','matlab.ui.control.SemicircularGauge'}
-            % If limits have been changed, update GUI field limits and coloring also
-            if ~isempty(lims) && ~isequal(lims,obj.lastlims)
-              ext=obj.guiprefs.gaugeLimitExtension;
-              rng=range(lims);
-              scalelims=[lims(1)-rng*ext(1),lims(1);lims(1),lims(2);lims(2),lims(2)+rng*ext(2)];
-              h.Limits=double([min(scalelims(:)),max(scalelims(:))]);
-              h.ScaleColors=obj.guiprefs.gaugeCol;
-              h.ScaleColorLimits=double(scalelims);
-            end
-            h.Value=obj.val{1};
-            if ~isempty(lims)
-              if obj.val{1}<lims(1) || obj.val{1}>lims(2)
-                h.BackgroundColor=obj.errcol;
-              else
-                h.BackgroundColor=[1 1 1];
-              end
-            end
-          case 'matlab.ui.control.StateButton'
-            on=false(1,nvals);
-            negate=false;
-            if pvl(1)=='~'
-              negate=true;
-              if length(pvl)>1; pvl=pvl(2:end); end
-            end
-            for ival=1:nvals
-              if strcmpi(obj.val{ival},'ON') || strcmpi(obj.val{ival},'YES') || strcmpi(obj.val{ival},'IN') || (isnumeric(obj.val{ival}) && obj.val{ival}>0)
-                on(ival)=true;
-              end
-            end
-            if negate; on=~on; end
-            if nvals>1
-              for ival=2:nvals
-                if strcmp(pvl,'|')
-                  on(1) = on(1) | on(ival) ;
-                elseif strcmp(pvl,'XOR')
-                  on(1) = xor(on(1),on(ival)) ;
-                else
-                  on(1) = on(1) & on(ival) ;
-                end
-              end
-            end
-            if on(1)
-              h.Value=true;
-            else
-              h.Value=false;
-            end
+          end
         end
       end
       obj.lastlims=obj.limits;
@@ -448,6 +486,12 @@ classdef PV < handle
             putval=val{ipv};
           else
             putval=val;
+          end
+          % Convert value to control system units
+          if ~isempty(obj.conv) && length(obj.conv)==1 && isnumeric(putval)
+            putval = putval ./ obj.conv ;
+          elseif ~isempty(obj.conv) && length(obj.conv)==2 && isnumeric(putval)
+            putval = (putval-obj.conv(2)) ./ obj.conv(1) ;
           end
           if ~strcmp(class(putval),obj.nativeclass{ipv}) % cast to a class that java client expecting
             putval=cast(putval,obj.nativeclass{ipv});
@@ -606,6 +650,9 @@ classdef PV < handle
           end
           fprintf('PV Cleanup Complete.\n');
       end
+    end
+    function ContextMenuCallback(obj,~,~) %#ok<INUSD>
+      msgbox(evalc('disp(obj)'));
     end
   end
   methods(Access=protected)

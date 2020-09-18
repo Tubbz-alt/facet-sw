@@ -152,8 +152,8 @@ classdef F2_CathodeServicesApp < handle
         PV(context,'name',"lsr_ymov",'pvname',"MIRR:LT10:770:M2_MOTR_V",'monitor',true,'mode','rw'); % Y position move command for laser mirror [mm]
         PV(context,'name',"lsr_stopx",'pvname',"MIRR:LT10:770:M2_MOTR_H.STOP",'mode','rw'); % stop X motion immediately
         PV(context,'name',"lsr_stopy",'pvname',"MIRR:LT10:770:M2_MOTR_V.STOP",'mode','rw'); % stop y motion immediately
-        PV(context,'name',"lsr_xvel",'pvname',"MIRR:LT10:770:M2_MOTR_H.VELO",'mode',"rw",'putwait',true,'monitor',true); % X mirror move velocity [mm/s]
-        PV(context,'name',"lsr_yvel",'pvname',"MIRR:LT10:770:M2_MOTR_V.VELO",'mode',"rw",'putwait',true,'monitor',true); % X mirror move velocity [mm/s]
+        PV(context,'name',"lsr_xvel",'pvname',"MIRR:LT10:770:M2_MOTR_H.VELO",'mode',"rw",'putwait',true,'monitor',true,'conv',obj.VCC_mirrcal(3)); % X mirror move velocity [mm/s]
+        PV(context,'name',"lsr_yvel",'pvname',"MIRR:LT10:770:M2_MOTR_V.VELO",'mode',"rw",'putwait',true,'monitor',true,'conv',obj.VCC_mirrcal(4)); % X mirror move velocity [mm/s]
         PV(context,'name',"lsr_xaccl",'pvname',"MIRR:LT10:770:M2_MOTR_H.ACCL",'monitor',true); % X mirror move acceleration [mm/s/s]
         PV(context,'name',"lsr_yaccl",'pvname',"MIRR:LT10:770:M2_MOTR_V.ACCL",'monitor',true); % Y mirror move acceleration [mm/s/s]
         PV(context,'name',"lsr_motion",'pvname',["MIRR:LT10:770:M2_MOTR_H.DMOV","MIRR:LT10:770:M2_MOTR_V.DMOV"],'monitor',true,'pvlogic',"~&"); % Motion status for laser based on motors, true if in motion
@@ -1272,6 +1272,8 @@ classdef F2_CathodeServicesApp < handle
       obj.VCC_mirrcal=cal;
       obj.pvs.lsr_posx.conv = obj.VCC_mirrcal([3 1]) ;
       obj.pvs.lsr_posy.conv = obj.VCC_mirrcal([4 2]) ;
+      obj.pvs.lsr_xvel.conv = obj.VCC_mirrcal(3) ;
+      obj.pvs.lsr_yvel.conv = obj.VCC_mirrcal(4) ;
       obj.gui.MotorCALMenu.Text = sprintf('Motor CAL = [%g %g %g %g]',cal) ;
     end
     function SetLimits(obj,par,limits)
@@ -1447,7 +1449,7 @@ classdef F2_CathodeServicesApp < handle
   end
   % watchdog / GUI updaters
   methods(Access=private)
-    function watchdogUD(obj,~,~) % called whenever a monitored pv value change
+    function watchdogUD(obj,~,~) % called whenever a monitored pv value changes
       persistent t0
       % If in an error state, don't do anything until error is cleared (with GUI reset button)
       if iserror(obj.State)
@@ -1775,7 +1777,7 @@ classdef F2_CathodeServicesApp < handle
     function [nx,ny,img] = getimg(obj)
       nx=obj.pvs.CCD_nx.val{1}; ny=obj.pvs.CCD_ny.val{1};
       obj.pvs.CCD_img.nmax=round(nx*ny);
-      img=reshape(caget(obj.pvs.CCD_img),ny,nx);
+      img=reshape(caget(obj.pvs.CCD_img),nx,ny);
       if obj.imrot>0 % rotate image by multiples of 90 degrees
         img=rot90(img,obj.imrot);
       end

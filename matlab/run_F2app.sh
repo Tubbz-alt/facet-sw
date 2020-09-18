@@ -14,6 +14,3 @@ LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/lcls/epics/extensions/labca/R3.7.2
 export LD_LIBRARY_PATH;
 cd ${APPDIR}/${APPNAME}
 eval "./${APPNAME}"
-
-
-export PATH=${PATH}:${EPICS_BASE_TOP}/bin/${EPICS_HOST_ARCH}
