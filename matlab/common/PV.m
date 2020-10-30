@@ -12,8 +12,7 @@ classdef PV < handle
     name string = "none" % user supplied name for PV
     pvname string = "none" % Control system PV string (can be a vector associating this PV to multiple control PVs)
     monitor=false; % Flag this PV to be monitored
-    type PVtype = PVtype.EPICS % Control system type (choose from listed Constant types)
-    debug uint8 {mustBeMember(debug,[0,1,2])} = 2 % 0=live, 1=read only, 2=no connection
+    debug uint8 {mustBeMember(debug,[0,1,2])} = 0 % 0=live, 1=read only, 2=no connection
     units string = "none" % User specified units
     conv double % Scalar Conversion factor PV -> reported value or vector of polynomial coefficients (for use with polyval)
     val cell % Last read value (can be any type and length depending on number and type of linked pvname PVs)
@@ -27,6 +26,7 @@ classdef PV < handle
     putwait logical = false % wait for confirmation of pvput command
     timeout double {mustBePositive} = 3 % timout in s for waiting for a new value asynchrounously
     RunStartDelay = 3 % Wait this long after issuing Run method command to start polling of PVs (e.g. to allow startup scripts to complete)
+    alarm uint8 = 0 % monitor alarm severity if >0 [=1 returns NaN for val if MAJOR alarm, =2 returns NaN for val if MINOR or MAJOR alarm)
   end
   properties(SetObservable)
     guihan = 0 % gui handle to assoicate with this PV (e.g. to write out a variable or control a switch etc) (can be vector of handles)
@@ -38,6 +38,10 @@ classdef PV < handle
     utimer % Holder for update timer object
     context % EPICS java ca client context object (needs to be passed to contructor)
     channel cell % ca channel(s) for provided pvname(s)
+    type PVtype = PVtype.EPICS % Control system type
+    alarmchannel cell % corresponding alarm channel for each PV channel
+    SEVR cell % current alarm severity (string cell array of length PV channel)
+    isalarm logical = false % is this PV object currently in alarm state?
   end
   properties(SetAccess=protected,Hidden)
     ContextMenu % Gets called on GUI right-click
@@ -48,11 +52,12 @@ classdef PV < handle
     lastconv % last conversion values
     nativeclass % Matlab class type determined when opened channel and first read data
     future % asynchronous get handle
+    futurealarm % asynchronous alarm get handle
     future_tic % timestamp when asynchronous get initiated
   end
   properties(Constant)
     errcol=[0.7 0 0];
-    caver string = "1.2.2" % EPICS CA version to use (ca-<version>.jar must be on matlab search path)
+    caver string = "1.2.2" % EPICS Java CA version to use (ca-<version>.jar must be on matlab search path)
   end
   methods
     function obj=PV(cntxt,varargin)
@@ -63,6 +68,9 @@ classdef PV < handle
         error('Must provide ''context'' (from output of static Initialize method');
       end
       obj.context=cntxt;
+      if isa(cntxt,'PVtype') && cntxt==PVtype.EPICS_labca
+        obj.type = PVtype.EPICS_labca ;
+      end
       obj.guiprefs = GUI_PREFS ; % Use default preferences unless overriden by user
       if nargin>1
         for iarg=2:2:nargin
@@ -172,8 +180,13 @@ classdef PV < handle
       %  Subsequent calls to caget will update new variables as they become
       %  available. Designed to be used in a polling loop. updt flag only returns true
       %  when data actually fetched in asynchronous context
+      %  ASYNCHRONOUS GETS ONLY SUPPORTED WITH JAVA CA CLIENT (type=PVtype.EPICS): ignored with labca client (type=PVtype.EPICS_labca)
+      persistent firstcall
       
-      if ~exist('asyn','var') % default to synchronous gets
+      if ~exist('asyn','var') % default to synchronous gets if not specified or not java CA client
+        asyn=false;
+      elseif isequal(asyn,'force') % Force GUI updates
+        firstcall=[];
         asyn=false;
       end
       
@@ -182,7 +195,11 @@ classdef PV < handle
       if length(obj)>1
         newval=cell(1,length(obj));
         for iobj=1:length(obj)
-          [newval{iobj},updt(iobj)]=obj(iobj).caget(asyn);
+          try
+            [newval{iobj},updt(iobj)]=obj(iobj).caget(asyn);
+          catch % return nan if failed to do get operation (e.g. PV channel becomes unavailable)
+            newval{iobj}=nan;
+          end
         end
         return
       else
@@ -192,16 +209,17 @@ classdef PV < handle
         end
       end
       
+      if asyn && obj.type~=PVtype.EPICS % force synchronous gets if not java CA client
+        asyn=false;
+      end
+      
       % If EPICS type, then must have provided context link
-      if isempty(obj.context) && obj.type==PVtype.EPICS
+      if isempty(obj.context)
         error('No context object provided, caget/caput will not work')
       end
       
-      % force update for the first call and link to previous values
-      lastval=obj.val;
-      
       % currently only supporting EPICS, also skip if debug flag set >1
-      if obj.type~=PVtype.EPICS
+      if obj.type~=PVtype.EPICS && obj.type~=PVtype.EPICS_labca
         warning('Unsupported controls type, skipping caget %s',obj.name);
         return
       elseif obj.debug>1
@@ -218,19 +236,32 @@ classdef PV < handle
       if asyn && isempty(obj.future)
         obj.future=cell(1,length(obj.pvname)) ;
         obj.future_tic=zeros(1,length(obj.pvname));
+        if obj.alarm>0
+          obj.futurealarm=cell(1,length(obj.pvname)) ;
+        end
       end
+      obj.isalarm=false;
       for ipv=1:length(obj.pvname)
-        if islogical(obj.channel{ipv}) && ~obj.channel{ipv}
+        if obj.type == PVtype.EPICS && islogical(obj.channel{ipv}) && ~obj.channel{ipv}
           error('Channel cleared (with Cleanup method?) for PV: %s',obj.pvname(ipv));
         end
         if asyn && isempty(obj.future{ipv}) % Launch asynchronous get thrread
           obj.future{ipv} = obj.channel{ipv}.getAsync();
           obj.future_tic(ipv) = tic ;
+          if obj.alarm>0
+            obj.futurealarm{ipv} = obj.alarmchannel{ipv}.getAsync();
+          end
           return
         elseif asyn && ~isempty(obj.future{ipv}) % Get data from previously lanched asyn thread if available
-          if obj.future{ipv}.isDone() % fetch data if asyn thread returned
+          if obj.future{ipv}.isDone() && ( obj.alarm==0 || obj.futurealarm{ipv}.isDone() ) % fetch data if asyn thread returned
             cavals = obj.future{ipv}.get() ;
             obj.future{ipv} = [] ;
+            if obj.alarm>0
+              obj.SEVR{ipv} = string(obj.futurealarm{ipv}.get()) ;
+              if obj.SEVR{ipv}=="MAJOR" || obj.SEVR{ipv}=="MINOR" && obj.alarm>1
+                obj.isalarm=true;
+              end
+            end
           elseif toc(obj.future_tic(ipv))>obj.timeout % warn and skip if asyn command times out
             warning('Timeout waiting for PV: %s, skipping...',obj.pvname(ipv));
             obj.future{ipv}=[];
@@ -239,7 +270,39 @@ classdef PV < handle
             return
           end
         else
-          cavals = obj.channel{ipv}.get();
+          if obj.type==PVtype.EPICS
+            cavals = obj.channel{ipv}.get();
+            if obj.alarm>0
+              obj.SEVR{ipv} = string(obj.alarmchannel{ipv}.get()) ;
+              if obj.SEVR{ipv}=="MAJOR" || obj.SEVR{ipv}=="MINOR" && obj.alarm>1
+                obj.isalarm=true;
+              end
+            end
+          else
+            if obj.monitor && ~isempty(obj.val)
+              newmoni = lcaNewMonitorValue(cellstr(obj.pvname(ipv))) ;
+            else
+              newmoni = true ;
+            end
+            if ~isequal(obj.nmax,obj.lastnm) || ~isequal(obj.conv,obj.lastconv) || ~isequal(obj.limits,obj.lastlims)
+              newmoni=true(size(newmoni));
+            end
+            if newmoni
+              if isempty(obj.nmax) % default to getting everything
+                cavals=lcaGet(char(obj.pvname(ipv)));
+              else
+                cavals=lcaGet(char(obj.pvname(ipv)),double(obj.nmax)) ;
+              end
+              if obj.alarm>0 % Process alarm severity
+                obj.SEVR{ipv} = lcaGet(obj.alarmchannel{ipv}) ;
+                if obj.SEVR{ipv}=="MAJOR" || obj.SEVR{ipv}=="MINOR" && obj.alarm>1
+                  obj.isalarm=true;
+                end
+              end
+            else
+              cavals=obj.val{ipv} ;
+            end
+          end
         end
         if ~isempty(obj.nmax) && length(cavals)>obj.nmax % default to getting everything
           cavals=cavals(1:obj.nmax);
@@ -261,6 +324,10 @@ classdef PV < handle
       else
         newval = obj.val ;
       end
+      if isempty(firstcall) % Force GUI updating on first call
+        firstcall=true;
+        updt=true;
+      end
       if ~updt; return; end % If nothing changed, nothing else to do
       
       % Notify listeners that PV value has changed
@@ -274,7 +341,6 @@ classdef PV < handle
         for ihan=1:length(obj.guihan) % Loop over all linked handles
           h=obj.guihan(ihan);
           if h==0 || ~ishandle(h); continue; end
-          if isequal(lastval,obj.val) && isequal(lims,obj.lastlims); continue; end % loop if values haven't changed
           switch class(h)
             case 'matlab.ui.control.Lamp' % set lamp to green if all associated PVs evaluate to true ('ON', 'YES', or >0), else red
               negate=false;
@@ -456,8 +522,8 @@ classdef PV < handle
       %  or length of PV vector.
       % stat=0 on success
       
-      % If EPICS type, then must have provided context link
-      if isempty(obj.context) && obj.type==PVtype.EPICS
+      % must have provided context link
+      if isempty(obj.context)
         error('No context object provided, caget/caput will not work')
       end
       
@@ -493,17 +559,39 @@ classdef PV < handle
           elseif ~isempty(obj.conv) && length(obj.conv)==2 && isnumeric(putval)
             putval = (putval-obj.conv(2)) ./ obj.conv(1) ;
           end
-          if ~strcmp(class(putval),obj.nativeclass{ipv}) % cast to a class that java client expecting
-            putval=cast(putval,obj.nativeclass{ipv});
-          end
-          if obj.type==PVtype.EPICS
+          if obj.type==PVtype.EPICS % java CA client
+            if ~strcmp(class(putval),obj.nativeclass{ipv}) % cast to a class that java client expecting
+              putval=cast(putval,obj.nativeclass{ipv});
+            end
             if islogical(obj.channel{ipv}) && ~obj.channel{ipv}
               error('Channel cleared (with Cleanup method?) for PV: %s',obj.pvname(ipv));
             end
-            if obj.putwait
-              obj.channel{ipv}.put(putval(:)) ;
+            try
+              if obj.putwait
+                obj.channel{ipv}.put(putval(:)) ;
+              else
+                obj.channel{ipv}.putNoWait(putval(:)) ;
+              end
+            catch
+              stat=1;
+              fprintf(obj.STDERR,'caput failed: %s %s\n',obj.pvname,num2str(val));
+            end
+          else % labca CA client
+            if isnumeric(putval)
+              putval=double(putval);
             else
-              obj.channel{ipv}.putNoWait(putval(:)) ;
+              putval=char(putval);
+            end
+            try
+              pvstr=char(obj.pvname(ipv));
+              if obj.putwait
+                lcaPut(pvstr,putval(:)');
+              else
+                lcaPutNoWait(pvstr,putval(:)');
+              end
+            catch
+              stat=1;
+              fprintf(obj.STDERR,'caput failed: %s %s\n',obj.pvname,num2str(val));
             end
           end
         end
@@ -674,6 +762,19 @@ classdef PV < handle
       if ~isempty(obj.channel) % only call this once per object
         return
       end
+      % If using labca, then only thing that need to be done here is to register monitor
+      if obj.type==PVtype.EPICS_labca
+        if obj.monitor
+          for ipv=1:length(obj.pvname)
+            lcaSetMonitor(cellstr(obj.pvname(ipv)));
+            if obj.alarm>0
+              obj.alarmchannel{ipv} = char(regexprep(obj.pvname{ipv},"(\.\w+)","")+".SEVR") ;
+            end
+          end
+        end
+        return
+      end
+      % The rest is specific to the java channel access client
       if ~isempty(obj.pvdatatype) && ~iscell(obj.pvdatatype)
         obj.pvdatatype={obj.pvdatatype};
       end
@@ -688,6 +789,9 @@ classdef PV < handle
           end
         else
           obj.channel{ipv} = org.epics.ca.Channels.create(obj.context,char(obj.pvname(ipv))) ;
+        end
+        if obj.alarm>0
+          obj.alarmchannel{ipv} = org.epics.ca.Channels.create(obj.context,char(regexprep(obj.pvname{ipv},"(\.\w+)","")+".SEVR")) ;
         end
         obj.val{ipv} = obj.channel{ipv}.get() ;
         obj.nativeclass{ipv}=class(obj.val{ipv});
@@ -730,11 +834,12 @@ classdef PV < handle
     end
   end
   methods(Static)
-    function context = Initialize(type)
+    function context = Initialize(type,alarmlevel)
       %INITIALIZE One-time initialization steps for channel access client
-      % context = PV.Initialize(PVtype.EPICS)
+      % context = PV.Initialize(PVtype.EPICS [,alarmlevel])
       %  Perform one-time (per Matlab instance) EPICS initialization steps using java ca client
       %  context: object required for future channel creation, pass to PV objects in constructor
+      %  for labCA, alarm level determines behaviour on alarm status, set 0-4 (see labCA documentation)
       switch type
         case PVtype.EPICS
           % Add ca files to java search path
@@ -749,6 +854,15 @@ classdef PV < handle
           end
           % Generate context with default parameters
           context = org.epics.ca.Context ;
+        case PVtype.EPICS_labca
+          if ~exist('alarmlevel','var')
+            lcaSetSeverityWarnLevel(14) ;
+            lcaSetSeverityWarnLevel(4) ;
+          else
+            lcaSetSeverityWarnLevel(alarmlevel) ;
+          end
+          lcaSetTimeout(3) ;
+          context = type ;
       end
     end
   end

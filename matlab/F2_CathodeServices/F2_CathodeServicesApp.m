@@ -11,16 +11,21 @@ classdef F2_CathodeServicesApp < handle
     MapNumLines % Number of lines to map in defined mapping region (vector of length MapNumCols if moving in x direction)
     MapNumCols % Number of columns per line to map (vector of length MapNumLines if moving in y direction)
     MapTimeRemaining % Remaining QE mapping time [min]
-    LaserFluence % Laser fluence [uJ/cm^2] (FWHM)
     MotorVelo % Required motor velocity based on current rep rate, CleaningStepSize and CleaningNumPulsesPerStep [mm/s]
     AcclDist % Distance required to move before full velocity achieved
+    bonustime % Extra time to allow for edge-effects during cleaning (moving to correct location to start next line move)
   end
   properties(SetObservable)
     State CathodeServicesState = CathodeServicesState.Unknown
     buflen uint16 {mustBeGreaterThan(buflen,9)} = 500 % Data buffer length
+    adistadd double {mustBeNonnegative} = 0.5 % Extra distance to add to allow motor to achieve full velocity (mm)
   end
   properties
-    MapCenter(1,2) single = [0,0] % center of QE mapping region (also motor "home" position when QE Map tab selected)
+    imgnormalize string = "LaserEnergy" % Use "CCD" or "LaserEnergy" to normalize image plot during cleaning
+    orthcorrect logical = false % attempt to correct orthogobal backlash motion of mirrors
+    RepRate uint8 = 30 % Firing rate of source laser [Hz]
+    UseMirrPos logical = false % Use mirror position to determine where laser spot is, else use CCD image centroid
+    MapCenter(1,2) single = [0,0] % center of QE mapping region (also motor "home" position when QE Map tab selected) [mm]
     MapRadius {mustBeLessThan(MapRadius,5e-3),mustBePositive} = 1.5e-3 % Radius on cathode to map [m]
     MapNumPulsesPerStep uint8 {mustBeLessThan(MapNumPulsesPerStep,100),mustBePositive}= 3 % Number of pulses between mapping step positions
     MapStepSize {mustBeLessThan(MapStepSize,300e-6),mustBePositive}= 80e-6 % Step size to use during QE mapping [m]
@@ -30,7 +35,7 @@ classdef F2_CathodeServicesApp < handle
     CleaningCenter(1,2) single = [0,0] % center of cleaning area (also motor "home" position) [mm]
     CleaningRadius {mustBeLessThan(CleaningRadius,5e-3),mustBePositive} = 1.5e-3 % Radius on cathode to clean [m]
     CleaningNumPulsesPerStep uint8 {mustBeLessThan(CleaningNumPulsesPerStep,100),mustBePositive}= 3 % Number of pulses between cleaning step positions
-    CleaningStepSize {mustBeLessThan(CleaningStepSize,300e-6),mustBePositive}= 80e-6 % Step size to use during laser cleaning [m]
+    CleaningStepSize {mustBeLessThan(CleaningStepSize,300e-6),mustBePositive}= 40e-6 % Step size to use during laser cleaning [m]
     CheckRepVals logical = false % Perform check for past 10 PV values being the same in the watchdog timer?
     debug uint8 {mustBeMember(debug,[0,1,2])} = 2 % 0=live, 1=read only, 2=no connection
     gui; % ID for GUI (GUI launched by constructor)
@@ -41,6 +46,8 @@ classdef F2_CathodeServicesApp < handle
     CleaningLineNum uint16 = 1 % Current line number for cleaning process
     CleaningColNum uint16 = 1 % Current column number for cleaning process
     imrot uint8 {mustBeMember(imrot,[0,1,2,3])} = 0 % Apply image rotation (in multiples of 90 degrees)
+    imflipX logical = false % flip X axis after rotation ?
+    imflipY logical = false % flip Y axis after rotation ?
     ImageCIntMax single {mustBePositive} = 10 % Abort if any pixel integrates to this times ImageIntensityRange(2)
     dnCMD logical = false % force drawnow command in main watchdog loop
   end
@@ -48,13 +55,13 @@ classdef F2_CathodeServicesApp < handle
     VCC_mirrcal(1,4) single = [0,0,1,1] % Calibration mirror position to image position on VCC image [xpos,ypos,xscale,yscale] [mm]
     pvlist PV % Array of PV objects associated with this app
     pvs % Structure of PV arrays with PV names as structure field names
-    RepRate uint8 = 30 % Laser firing rep. period [Hz]
+    CCD_rate uint8 = 30 % CCD acquire rate [Hz]
     STDOUT=1; % standard output destination
     STDERR=2; % standard error output destination
     ImageSource string = "VCC" % Source for displaying to axis ("VCC" or "REF")
     CCD_stream logical % streaming of CCD images?
     CCD_scale single {mustBePositive} = 9.9e-6 % m / pixel
-    ImageIntensityRange(1,2) single {mustBeNonnegative} = [10 150] % Allowable range for image intensity measurements, set using SetLimits method
+    ImageIntensityRange(1,2) single {mustBeNonnegative} = [10 15000] % Allowable range for image intensity measurements, set using SetLimits method
     LaserSpotSizeRange(1,2) single {mustBeNonnegative} = [100 2000] % Allowable range for calculated laser spot size on CCD [um FWHM], set using SetLimits method
     LaserFluenceRange(1,2) single {mustBeNonnegative} = [0 20] % Allowable range for caculated laser fluence uJ/cm^2 [FWHM], set using SetLimits method
     GunVacuumRange(1,2) single {mustBeNonnegative} = [0.0001 10] % Allowable range for gun vacuum level [nTorr], set using SetLimits method
@@ -62,10 +69,11 @@ classdef F2_CathodeServicesApp < handle
     GunVacuum single % Last read back gun vacuum level [Torr]
     ImageIntensity single % Last calculated image intensity from selected screen
     LaserEnergy single % Last read back laser energy from Joulemeter [uJ]
-    LaserSpotSize single % Last calculated laser spot size on CCD [um FWHM]
+    LaserSpotSize(1,2) single % Last calculated laser spot size on CCD [um FWHM]
     LaserPosition_img(1,2) single % Last recorded laser position on screen [mm]
     LaserPosition_mot(1,2) single % Last indicted laser position based on mirror motors [mm]
-    LaserPosition_tol single = 0.05 % Tolerance for laser being where it is supposed to be [mm], set using SetLimits method
+    LaserPosition_tol single = 0.05 % Tolerance for laser being where it is supposed to be (distance from motor determined position) [mm], set using SetLimits method
+    LaserFluence double = 0 % Laser fluence [uJ/mm^2] (FWHM)
     ScreenPosition(1,2) single % Indicated screen position [mm]
     LaserMotorStopped logical = true % Is motor in stopped state?
     wtimerKA % Watchdog keepalive timer
@@ -88,6 +96,7 @@ classdef F2_CathodeServicesApp < handle
     wd_time_noncleaning(1,50) = nan(1,50) ;
     wd_time_ind uint8 = 1
     wd_time_ind_noncleaning uint8 = 1
+    CleaningSummaryData double
   end
   properties(Dependent,Hidden)
     wd_freq
@@ -98,46 +107,56 @@ classdef F2_CathodeServicesApp < handle
     CalibHan matlab.graphics.axis.Axes % handle to diagnostics window
   end
   properties(Constant,Hidden)
-    motrbktol=0.01; % motor readback tolerance [mm] : regard and readings within this tolerance band as equivalent
+    std2fwhm=2*sqrt(2*log(2)) ; % conversion of gaussian width to FWHM
+    motrbktol=0.04; % motor readback tolerance [mm] : regard readings within this tolerance band as equivalent
+    motorsettings=[0.4,0.5,0.001,0.1,0.0124 ; 0.4, 0.5,0.001,0.1,-0.01 ] ; % (all in local motor units) max speed, acceleration [for both backlash and normal] , base speed, backlash speed, backlash distance [X;Y]
     logfile='logs/F2_CathodeServicesApp'; % root filename to use for log
     camNames=["CAMR:LT10:900" "CTHD:IN10:111"]; % VCC,REF camera names
     version=1.0; % software version
     configprops=["CleaningCenter" "CleaningRadius" "CleaningNumPulsesPerStep" "CleaningStepSize" "CleaningStartPosition" "VCC_mirrcal" "ImageIntensityRange" "LaserSpotSizeRange" ...
-      "LaserFluenceRange" "GunVacuumRange" "LaserEnergyRange" "version" "LaserPosition_tol" "MotorVeloHome" "buflen" "imrot" ...
-      "MapCenter" "MapRadius" "MapNumPulsesPerStep" "MapStepSize" "MapStartPosition"]; % Properties to save/restore to/from configuration files
+      "LaserFluenceRange" "GunVacuumRange" "LaserEnergyRange" "version" "LaserPosition_tol" "MotorVeloHome" "buflen" "imrot" "imflipX" "imflipY"...
+      "MapCenter" "MapRadius" "MapNumPulsesPerStep" "MapStepSize" "MapStartPosition" "RepRate" "orthcorrect" "adistadd" "imgnormalize"]; % Properties to save/restore to/from configuration files
   end
   
   methods
     function obj=F2_CathodeServicesApp(debuglevel,guihan)
+%       warning('off','MATLAB:nearlySingularMatrix');
+      warning off
       % CS = F2_CathodeServices(debuglevel)
       if ~exist('debuglevel','var')
         error('Must provide debug level');
       end
-     
-      % labca setup and formation of PV list
-%       lcaSetSeverityWarnLevel(14) ;
-%       lcaSetSeverityWarnLevel(4) ;
       context = PV.Initialize(PVtype.EPICS) ;
+%       context = PV.Initialize(PVtype.EPICS_labca) ;
+%       cname = "PROF:IN10:241:" ;
+      cname = "CAMR:LT10:900:" ;
+      mname = ["MIRR:LT10:750:M3_MOTR_H" "MIRR:LT10:750:M3_MOTR_V"];
+%       mname = ["MIRR:LT10:770:M2_MOTR_H" "MIRR:LT10:770:M2_MOTR_V"];
       obj.pvlist=[PV(context,'name',"gun_rfstate",'pvname',"KLYS:LI10:21:MOD:HVON_STATE",'monitor',true,'pvlogic','~'); % Gun rf on/off (10-2 modulator state)
-        PV(context,'name',"CCD_img",'pvname',"CAMR:LT10:900:Image:ArrayData"); % CCD camera image
-        PV(context,'name',"CCD_counter",'pvname',"CAMR:LT10:900:ArrayCounter_RBV",'monitor',true); % Image acquisition counter
-        PV(context,'name',"CCD_gain",'pvname',"CAMR:LT10:900:Gain",'monitor',true); % CCD camera image gain factor
-        PV(context,'name',"CCD_datatype",'pvname',"CAMR:LT10:900:DataType"); % CCD camera data type
-        PV(context,'name',"CCD_nx",'pvname',"CAMR:LT10:900:ArraySizeX_RBV",'monitor',true); % # x-axis data points in CCD image
-        PV(context,'name',"CCD_ny",'pvname',"CAMR:LT10:900:ArraySizeY_RBV",'monitor',true); % # y-axis data points in CCD image
-        PV(context,'name',"CCD_xpos",'pvname',"CAMR:LT10:900:Stats:Xpos_RBV",'monitor',true,'conv',0.001); % xpos on CCD [mm]
-        PV(context,'name',"CCD_ypos",'pvname',"CAMR:LT10:900:Stats:Ypos_RBV",'monitor',true,'conv',0.001); % ypos on CCD [mm]
-        PV(context,'name',"CCD_acq",'pvname',"CAMR:LT10:900:Acquire.RVAL",'monitor',true); % acquiring or not (readback)
-        PV(context,'name',"CCD_acqset",'pvname',"CAMR:LT10:900:Acquire",'pvdatatype',java.lang.Integer(0).getClass); % acquiring or not (set)
-        PV(context,'name',"CCD_acqmode",'pvname',"CAMR:LT10:900:ImageMode_RBV.RVAL",'monitor',true); % image mode (0=single, 2=continuous)
-        PV(context,'name',"CCD_acqsetmode",'pvname',"CAMR:LT10:900:ImageMode",'pvdatatype',java.lang.Integer(0).getClass); % PV to use to set acquisition mode
-        PV(context,'name','CCD_x1','pvname',"CAMR:LT10:900:ROI:MinX_mm_RBV",'monitor',true); % x1 [mm]
-        PV(context,'name','CCD_y1','pvname',"CAMR:LT10:900:ROI:MinY_mm_RBV",'monitor',true); % y1 [mm]
-        PV(context,'name','CCD_x2','pvname',"CAMR:LT10:900:ROI:MaxX_mm_RBV",'monitor',true); % x(end) [mm]
-        PV(context,'name','CCD_y2','pvname',"CAMR:LT10:900:ROI:MaxY_mm_RBV",'monitor',true); % y(end) [mm]
-        PV(context,'name',"CCD_spotsize",'pvname',["CAMR:LT10:900:Stats:SigmaX_mm_RBV","CAMR:LT10:900:Stats:SigmaY_mm_RBV"],'monitor',true,'pvlogic',"MAX",'conv',2*sqrt(2*log(2))); % Laser spot size (um FWHM)
-        PV(context,'name',"CCD_intensity",'pvname',"CAMR:LT10:900:Stats:MaxValue_RBV",'monitor',true); % intensity of laser spot on CCD
-        PV(context,'name',"laser_shutterCtrl",'pvname',"IOC:SYS1:MP01:MSHUTCTL",'monitor',true); % Laser MPS shutter control
+        PV(context,'name',"CCD_img",'pvname',cname+"Image:ArrayData"); % CCD camera image
+        PV(context,'name',"CCD_counter",'pvname',cname+"ArrayCounter_RBV",'monitor',true); % Image acquisition counter
+%         PV(context,'name',"CCD_gain",'pvname',cname+"Gain",'monitor',true); % CCD camera image gain factor
+%         PV(context,'name',"CCD_datatype",'pvname',cname+"DataType"); % CCD camera data type
+        PV(context,'name',"CCD_nx",'pvname',cname+"ArraySizeX_RBV",'monitor',true); % # x-axis data points in CCD image
+        PV(context,'name',"CCD_ny",'pvname',cname+"ArraySizeY_RBV",'monitor',true); % # y-axis data points in CCD image
+        PV(context,'name',"CCD_xpos",'pvname',cname+"Stats:Xpos_RBV",'monitor',true,'conv',0.001); % xpos on CCD [mm]
+        PV(context,'name',"CCD_ypos",'pvname',cname+"Stats:Ypos_RBV",'monitor',true,'conv',0.001); % ypos on CCD [mm]
+        PV(context,'name',"CCD_xpos_out",'pvname',"SIOC:SYS1:ML00:AO358",'mode',"rw"); % Output of locally calculated X laser spot position [mm]
+        PV(context,'name',"CCD_ypos_out",'pvname',"SIOC:SYS1:ML00:AO359",'mode',"rw"); % Output of locally calculated Y laser spot position [mm]
+        PV(context,'name',"CCD_acq",'pvname',cname+"Acquire.RVAL",'monitor',true); % acquiring or not (readback)
+        PV(context,'name',"CCD_acqset",'pvname',cname+"Acquire",'pvdatatype',java.lang.Integer(0).getClass); % acquiring or not (set)
+        PV(context,'name',"CCD_acqmode",'pvname',cname+"ImageMode_RBV.RVAL",'monitor',true); % image mode (0=single, 2=continuous)
+        PV(context,'name',"CCD_acqsetmode",'pvname',cname+"ImageMode",'pvdatatype',java.lang.Integer(0).getClass); % PV to use to set acquisition mode
+        PV(context,'name','CCD_x1','pvname',cname+"ROI:MinX_mm_RBV",'monitor',true); % x1 [mm]
+        PV(context,'name','CCD_y1','pvname',cname+"ROI:MinY_mm_RBV",'monitor',true); % y1 [mm]
+        PV(context,'name','CCD_x2','pvname',cname+"ROI:MaxX_mm_RBV",'monitor',true); % x(end) [mm]
+        PV(context,'name','CCD_y2','pvname',cname+"ROI:MaxY_mm_RBV",'monitor',true); % y(end) [mm]
+        PV(context,'name',"CCD_spotsize",'pvname',cname+["Stats:SigmaX_mm_RBV" "Stats:SigmaY_mm_RBV"],'monitor',true,'conv',2*sqrt(2*log(2))); % Laser spot size (um FWHM)
+        PV(context,'name',"CCD_xspotsize_out",'pvname',"SIOC:SYS1:ML00:AO348",'mode',"rw"); % Output of locally calculated X laser spot size (um FWHM)
+        PV(context,'name',"CCD_yspotsize_out",'pvname',"SIOC:SYS1:ML00:AO349",'mode',"rw"); % Output of locally calculated Y laser spot size (um FWHM)
+        PV(context,'name',"CCD_intensity",'pvname',cname+"Stats:MaxValue_RBV"); % intensity of laser spot on CCD - DON'T monitor this, use own calculation
+        PV(context,'name',"CCD_intensity_out",'pvname',"SIOC:SYS1:ML00:AO360",'mode',"rw");
+        PV(context,'name',"laser_shutterCtrl",'pvname',"IOC:SYS1:MP01:MSHUTCTL",'monitor',true,'pvlogic',"~"); % Laser MPS shutter control
         PV(context,'name',"laser_shutterStatIn",'pvname',"SHUT:LT10:950:IN_MPS.RVAL",'monitor',true); % Laser MPS shutter IN status
         PV(context,'name',"laser_shutterStatOut",'pvname',"SHUT:LT10:950:OUT_MPS.RVAL",'monitor',true); % Laser MPS shutter OUT status
         PV(context,'name',"watchdog_keepalive",'pvname',"IN10_CATHODESUPPORT:laserShutterOp",'pvdatatype',java.lang.Integer(0).getClass); % EPICS CathodeServices watchdog keepalive PV
@@ -146,25 +165,40 @@ classdef F2_CathodeServicesApp < handle
         PV(context,'name',"fcup_stat",'pvname',"FARC:IN10:241:PNEUMATIC",'monitor',true); % Faraday cup in/out status
         PV(context,'name',"fcup_val",'pvname',"FARC:IN10:241:VAL",'monitor',true); % Faraday cup reading
         PV(context,'name',"torr_val",'pvname',"TORR:IN10:1:VAL",'monitor',true); % Torroid charge reading
-        PV(context,'name',"lsr_posx",'pvname',"MIRR:LT10:770:M2_MOTR_H.RBV",'monitor',true,'conv',obj.VCC_mirrcal([3 1])); % X Position readback for laser based on motors [mm]
-        PV(context,'name',"lsr_posy",'pvname',"MIRR:LT10:770:M2_MOTR_V.RBV",'monitor',true,'conv',obj.VCC_mirrcal([4 2])); % Y Position readback for laser based on motors [mm]
-        PV(context,'name',"lsr_xmov",'pvname',"MIRR:LT10:770:M2_MOTR_H",'monitor',true,'mode','rw'); % X position move command for laser mirror [mm]
-        PV(context,'name',"lsr_ymov",'pvname',"MIRR:LT10:770:M2_MOTR_V",'monitor',true,'mode','rw'); % Y position move command for laser mirror [mm]
-        PV(context,'name',"lsr_stopx",'pvname',"MIRR:LT10:770:M2_MOTR_H.STOP",'mode','rw'); % stop X motion immediately
-        PV(context,'name',"lsr_stopy",'pvname',"MIRR:LT10:770:M2_MOTR_V.STOP",'mode','rw'); % stop y motion immediately
-        PV(context,'name',"lsr_xvel",'pvname',"MIRR:LT10:770:M2_MOTR_H.VELO",'mode',"rw",'putwait',true,'monitor',true,'conv',obj.VCC_mirrcal(3)); % X mirror move velocity [mm/s]
-        PV(context,'name',"lsr_yvel",'pvname',"MIRR:LT10:770:M2_MOTR_V.VELO",'mode',"rw",'putwait',true,'monitor',true,'conv',obj.VCC_mirrcal(4)); % X mirror move velocity [mm/s]
-        PV(context,'name',"lsr_xaccl",'pvname',"MIRR:LT10:770:M2_MOTR_H.ACCL",'monitor',true); % X mirror move acceleration [mm/s/s]
-        PV(context,'name',"lsr_yaccl",'pvname',"MIRR:LT10:770:M2_MOTR_V.ACCL",'monitor',true); % Y mirror move acceleration [mm/s/s]
-        PV(context,'name',"lsr_motion",'pvname',["MIRR:LT10:770:M2_MOTR_H.DMOV","MIRR:LT10:770:M2_MOTR_V.DMOV"],'monitor',true,'pvlogic',"~&"); % Motion status for laser based on motors, true if in motion
-        PV(context,'name',"laser_energy",'pvname',"LASR:LT10:930:PWR",'monitor',true); % Laser energy readout (uJ)
+        PV(context,'name',"lsr_posx",'pvname',mname(1)+".RBV",'monitor',true,'conv',obj.VCC_mirrcal([3 1])); % X Position readback for laser based on motors [mm]
+        PV(context,'name',"lsr_posy",'pvname',mname(2)+".RBV",'monitor',true,'conv',obj.VCC_mirrcal([4 2])); % Y Position readback for laser based on motors [mm]
+        PV(context,'name',"lsr_xmov",'pvname',mname(1),'monitor',true,'mode','rw','conv',obj.VCC_mirrcal(3)); % X position move command for laser mirror [mm]
+        PV(context,'name',"lsr_ymov",'pvname',mname(2),'monitor',true,'mode','rw','conv',obj.VCC_mirrcal(4)); % Y position move command for laser mirror [mm]
+        PV(context,'name',"lsr_stopx",'pvname',mname(1)+".STOP",'mode','rw'); % stop X motion immediately
+        PV(context,'name',"lsr_stopy",'pvname',mname(2)+".STOP",'mode','rw'); % stop y motion immediately
+        PV(context,'name',"lsr_xvel",'pvname',mname(1)+".VELO",'mode',"rw",'putwait',true,'monitor',true,'conv',abs(obj.VCC_mirrcal(3))); % X mirror move velocity [mm/s]
+        PV(context,'name',"lsr_yvel",'pvname',mname(2)+".VELO",'mode',"rw",'putwait',true,'monitor',true,'conv',abs(obj.VCC_mirrcal(4))); % X mirror move velocity [mm/s]
+        PV(context,'name',"lsr_xaccl",'pvname',mname(1)+".ACCL",'monitor',true); % X mirror move acceleration [mm/s/s]
+        PV(context,'name',"lsr_yaccl",'pvname',mname(2)+".ACCL",'monitor',true); % Y mirror move acceleration [mm/s/s]
+        PV(context,'name',"lsr_xdir",'pvname',mname(1)+".CDIR"); % X mirror last move direction (1= +ve, 0=-ve)
+        PV(context,'name',"lsr_ydir",'pvname',mname(2)+".CDIR"); % Y mirror last move direction (1= +ve, 0=-ve)
+        PV(context,'name',"motx_maxvel",'pvname',mname(1)+".VMAX"); % max mirror motor velocity (Horizontal) (mm/s) - local motor units
+        PV(context,'name',"moty_maxvel",'pvname',mname(2)+".VMAX"); % max mirror motor velocity (Vertical) - local motor units
+        PV(context,'name',"motx_minvel",'pvname',mname(1)+".VBAS"); % base mirror motor velocity (Horizontal) (mm/s) - local motor units
+        PV(context,'name',"moty_minvel",'pvname',mname(2)+".VBAS"); % base mirror motor velocity (Vertical) - local motor units
+        PV(context,'name',"motx_accl",'pvname',mname(1)+".ACCL"); % horizontal mirror motor acceleration (s) - local motor units
+        PV(context,'name',"moty_accl",'pvname',mname(2)+".ACCL"); % vertical mirror motor acceleration (s) - local motor units
+        PV(context,'name',"motx_baccl",'pvname',mname(1)+".BACC"); % horizontal mirror motor backlash acceleration (s) - local motor units
+        PV(context,'name',"moty_baccl",'pvname',mname(2)+".BACC"); % vertical mirror motor backlash acceleration (s) - local motor units
+        PV(context,'name',"motx_bvelo",'pvname',mname(1)+".BVEL"); % horizontal mirror motor backlash velocity (mm/s) - local motor units
+        PV(context,'name',"moty_bvelo",'pvname',mname(2)+".BVEL"); % vertical mirror motor backlash velocity (mm/s) - local motor units
+        PV(context,'name',"motx_bdist",'pvname',mname(1)+".BDST"); % horizontal mirror motor backlash distance (mm) - local motor units
+        PV(context,'name',"moty_bdist",'pvname',mname(2)+".BDST"); % vertical mirror motor backlash distance (mm) - local motor units
+        PV(context,'name',"lsr_motion",'pvname',mname+".DMOV",'monitor',true,'pvlogic',"~&"); % Motion status for laser based on motors, true if in motion
+%         PV(context,'name',"laser_energy",'pvname',"LASR:LT10:930:PWR",'monitor',true); % Laser energy readout (uJ)
+        PV(context,'name',"laser_energy",'pvname',"PMTR:LT10:930:QUERYDATA",'monitor',true,'conv',1e6); % Laser energy readout (uJ)
         PV(context,'name',"gun_vacuum",'pvname',"VGCC:IN10:113:P",'monitor',true,'conv',1e9); % Vacuum pressire for gun [nTorr]
         PV(context,'name',"laser_telescope",'pvname',"LASR:LT10:100:TELE",'monitor',true);
-        PV(context,'name',"laser_reprate",'pvname',"CAMR:LT10:900:ArrayRate_RBV",'monitor',true);
+        PV(context,'name',"ArrayRate",'pvname',cname+"ArrayRate_RBV",'monitor',true);
         PV(context,'name',"watchdog_gunvaclimitHI",'pvname',"IN10_CATHODESUPPORT:gunVacHi"); % PV used by EPICS watchdog for high gun vacuum limit
-        PV(context,'name',"watchdog_laserlimitHI",'pvname',"IN10_CATHODESUPPORT:laserHi");
+        PV(context,'name',"watchdog_laserlimitHI",'pvname',"IN10_CATHODESUPPORT:laserHi",'conv',1e6);
         PV(context,'name',"watchdog_gunvaclimitLO",'pvname',"IN10_CATHODESUPPORT:gunVacLo"); % PV used by EPICS watchdog for high gun vacuum limit
-        PV(context,'name',"watchdog_laserlimitLO",'pvname',"IN10_CATHODESUPPORT:laserLo")]; % PV used by EPICS watchdog for high laser energy limit
+        PV(context,'name',"watchdog_laserlimitLO",'pvname',"IN10_CATHODESUPPORT:laserLo",'conv',1e6)]; % PV used by EPICS watchdog for high laser energy limit
       pset(obj.pvlist,'debug',debuglevel) ;
       obj.pvs = struct(obj.pvlist) ;
       
@@ -175,9 +209,8 @@ classdef F2_CathodeServicesApp < handle
       
       % Setup GUI field links to PVs
       obj.pvs.gun_rfstate.guihan = guihan.ModOFFLamp ;
-      obj.pvs.CCD_xpos.guihan = guihan.EditField_11 ;
-      obj.pvs.CCD_ypos.guihan = guihan.EditField_12 ;
-      obj.pvs.CCD_spotsize.guihan = [guihan.LaserSpotSizeGauge,guihan.EditField_14] ;
+%       obj.pvs.CCD_xpos.guihan = guihan.EditField_11 ;
+%       obj.pvs.CCD_ypos.guihan = guihan.EditField_12 ;
       obj.pvs.CCD_intensity.guihan = [guihan.EditField_4,guihan.ImageIntensityGauge] ;
       obj.pvs.laser_shutterCtrl.guihan = guihan.CLOSESwitch ; SetMode(obj.pvs.laser_shutterCtrl,"rw"); obj.pvs.laser_shutterCtrl.putwait=true;
       obj.pvs.laser_shutterStatIn.guihan = guihan.STATUSLamp ;
@@ -191,11 +224,15 @@ classdef F2_CathodeServicesApp < handle
       obj.pvs.laser_energy.guihan = [guihan.EditField_3,guihan.LaserEnergyGauge] ;
       obj.pvs.gun_vacuum.guihan = [guihan.EditField_2,guihan.GunVacuumGauge] ;
       obj.pvs.laser_telescope.guihan = guihan.SmallSpotEnabledLamp ;
-      obj.pvs.laser_reprate.guihan = guihan.EditField_13 ;
+      obj.pvs.ArrayRate.guihan = guihan.EditField_13 ;
       obj.pvs.torr_val.guihan = [guihan.EditField_6,guihan.Gauge] ;
       obj.pvs.fcup_val.guihan = [guihan.Gauge_2,guihan.EditField_5] ;
       obj.gui = guihan ;
       obj.debug = debuglevel ;
+      
+      % Enable alarm checking for critical PVs (alarm on MAJOR alarms)
+      obj.pvs.laser_energy.alarm=1;
+      obj.pvs.gun_vacuum.alarm=1;
       
       % There can only be a singleton instance of this running on the control system at one time
       % - use watchdog PV to detect running of another instance
@@ -223,6 +260,13 @@ classdef F2_CathodeServicesApp < handle
       obj.gui.HomeVELOmmsEditField.Value = double(obj.MotorVeloHome) ;
       
       % Set initial state
+      % - write mirror motor settings
+      caput(obj.pvs.motx_maxvel,obj.motorsettings(1,1)); caput(obj.pvs.moty_maxvel,obj.motorsettings(2,1));
+      caput(obj.pvs.motx_accl,obj.motorsettings(1,2)); caput(obj.pvs.moty_accl,obj.motorsettings(2,2));
+      caput(obj.pvs.motx_baccl,obj.motorsettings(1,2)); caput(obj.pvs.moty_baccl,obj.motorsettings(2,2));
+      caput(obj.pvs.motx_minvel,obj.motorsettings(1,3)); caput(obj.pvs.moty_minvel,obj.motorsettings(2,3));
+      caput(obj.pvs.motx_bvelo,obj.motorsettings(1,4)); caput(obj.pvs.moty_bvelo,obj.motorsettings(2,4));
+      caput(obj.pvs.motx_bdist,obj.motorsettings(1,5)); caput(obj.pvs.moty_bdist,obj.motorsettings(2,5));
       caget(obj.pvlist);% fetch all values once
       if strcmp(obj.pvs.laser_telescope.val{1},'IN')
         obj.State=CathodeServicesState.Standby_cleaninglasermode;
@@ -237,13 +281,17 @@ classdef F2_CathodeServicesApp < handle
       if obj.pvs.CCD_acqmode.val{1}==2 && obj.pvs.CCD_acq.val{1}>0
         guihan.StreamImageButton.Value=1;
       end
-      obj.RepRate = caget(obj.pvs.laser_reprate) ;
-      if obj.RepRate<1
-        obj.RepRate = 1;
+      obj.CCD_rate = caget(obj.pvs.ArrayRate) ;
+      if obj.CCD_rate<1
+        obj.CCD_rate = 1;
       end
-      obj.pvlist.pset('timeout',0.01 + double(1/obj.RepRate));
+      obj.pvlist.pset('timeout',0.01 + double(1/obj.CCD_rate));
       fprintf('Launch PV updater...\n');
       run(obj.pvlist,false,0.02,obj,'PVUpdated'); % polling time for PVs (set to faster than any expected laser firing rate)
+      
+      % Set initial motor settings to make sure they are good
+      caput(obj.pvs.lsr_xaccl,1);
+      caput(obj.pvs.lsr_yaccl,1);
       
       % Set PVs to autoupdate, PVUpdated event gets notified whenever one
       % of monitored PVs gets updated with a new value, which triggers
@@ -283,11 +331,12 @@ classdef F2_CathodeServicesApp < handle
         obj.LaserMotorStopped=false;
       end
       if isautopattern(obj.State) && ~obj.LaserMotorStopped && ~obj.ShutterCloseOveride
-        OpenShutterAndVerify(obj);
-        fprintf(obj.STDOUT,'%s: Mirror in motion: Opening Laser Shutter\n',datetime);
+        % DON'T DO THIS AS FINE-SCALE SEEKING BEHAVOR NEAR END MOVE POINT CAUSES FREQUENT SHUTTER COMMANDS
+%         OpenShutterAndVerify(obj);
+%         fprintf(obj.STDOUT,'%s: Mirror in motion: Opening Laser Shutter\n',datetime);
       elseif isautopattern(obj.State)
         CloseShutterAndVerify(obj);
-        fprintf(obj.STDOUT,'%s: Mirror stopped moving: Closing Laser Shutter\n',datetime);
+%         fprintf(obj.STDOUT,'%s: Mirror stopped moving: Closing Laser Shutter\n',datetime);
       end
     end
     function Proc_QEMap(obj,varargin)
@@ -319,7 +368,7 @@ classdef F2_CathodeServicesApp < handle
         if obj.State == CathodeServicesState.QEMap_linescan
           switch obj.MapStartPosition
             case {1,3} % horizontal moves
-              xm_new = caget(obj.pvs.lsr_posx) ; % current mirror command position
+              xm_new = obj.LaserPosition_img(1) ; % current mirror command position
               if xm_new >= shutoutpos(1) && xm_new <= shutoutpos(2)
                 OpenShutterAndVerify(obj);
               else
@@ -332,7 +381,7 @@ classdef F2_CathodeServicesApp < handle
                 obj.MapColNum = nstep ;
               end
             case {2,4} % vertical moves
-              ym_new = caget(obj.pvs.lsr_posy) ; % current mirror command position
+              ym_new = obj.LaserPosition_img(2) ; % current mirror command position
               if ym_new >= shutoutpos(1) && ym_new <= shutoutpos(2)
                 OpenShutterAndVerify(obj);
               else
@@ -427,7 +476,7 @@ classdef F2_CathodeServicesApp < handle
           elseif dest(2)>ylim(2)
             dest(2)=ylim(2);
           end
-          reqmove = dest - obj.LaserPosition_mot ;
+          reqmove = dest - obj.LaserPosition_img ;
           if any(abs(reqmove)>obj.motrbktol)
             obj.movemirror(reqmove,"fast");
           else % done with this move
@@ -438,8 +487,8 @@ classdef F2_CathodeServicesApp < handle
         case 2 % Move along next line or column
           obj.ShutterCloseOveride = true ; % Automatically opens shutter when over map area (starts just outside)
           obj.State = CathodeServicesState.QEMap_linescan ;
-          xm = caget(obj.pvs.lsr_posx) ;
-          ym = caget(obj.pvs.lsr_posy) ; % current mirror command position
+          xm = obj.LaserPosition_img(1) ;
+          ym = obj.LaserPosition_img(2) ; % current mirror command position
           adist = obj.AcclDist ; % distance to accelerate to full velocity [mm]
           switch obj.MapStartPosition
             case {1,3} % horizontal moves
@@ -481,8 +530,8 @@ classdef F2_CathodeServicesApp < handle
         case 3 % Move to beginning of next line or column
           obj.State = CathodeServicesState.QEMap_movingtonewline ;
           obj.ShutterCloseOveride = true ;
-          xm = caget(obj.pvs.lsr_posx) ;
-          ym = caget(obj.pvs.lsr_posy) ; % current mirror command position
+          xm = obj.LaserPosition_img(1) ;
+          ym = obj.LaserPosition_img(2) ; % current mirror command position
           adist = obj.AcclDist ; % distance to accelerate to full velocity [mm]
           switch obj.MapStartPosition
             case 1 % horizontal moves, starting from bottom
@@ -530,7 +579,7 @@ classdef F2_CathodeServicesApp < handle
           elseif dest(2)>ylim(2)
             dest(2)=ylim(2);
           end
-          reqmove = dest - obj.LaserPosition_mot ;
+          reqmove = dest - obj.LaserPosition_img ;
           if any(abs(reqmove)>obj.motrbktol)
             obj.movemirror(reqmove);
           else % done with this move
@@ -539,7 +588,7 @@ classdef F2_CathodeServicesApp < handle
         case 4 % QE Map complete, move back to center
           obj.ShutterCloseOveride = true ;
           CloseShutterAndVerify(obj) ;
-          if any( abs( obj.CleaningCenter - obj.LaserPosition_mot ) > obj.motrbktol )
+          if any( abs( obj.CleaningCenter - obj.LaserPosition_img ) > obj.motrbktol )
             obj.movemirror("home");
           else % done with this move
             mstate = 0 ;
@@ -550,7 +599,7 @@ classdef F2_CathodeServicesApp < handle
       end
     end
     function Proc_Cleaning(obj,varargin)
-      persistent cstate boundary whan xm ym shutoutpos
+      persistent cstate boundary whan xm ym href vref movecount usenext
       %PROC_CLEANING Process next logical cleaning step
       %Proc_Cleaning() 
       %Proc_Cleaning("SetBoundary",[x0 y0 w h]) Set cleaning pattern boundaries (Matlab rectangle function pos format with curvature=1)
@@ -558,7 +607,9 @@ classdef F2_CathodeServicesApp < handle
       % Initialize state
       if isempty(cstate)
         cstate=0;
+        usenext=false;
       end
+      movecount=0;
       
       % Process boundary set command
       if nargin>1
@@ -571,14 +622,23 @@ classdef F2_CathodeServicesApp < handle
       end
       
       % If laser motion currently in progress, update line/column number depending on movement direction, no further action required after this
-      % Also, open shutter when in cleaning zone defined by shutoutpos variable set in cstate 2
+      % Also, open shutter when in cleaning zone
+      % Also, force trajectory to be on straight line during move
+      shopen=false;
       if ~obj.LaserMotorStopped && cstate~=4
         if obj.State == CathodeServicesState.Cleaning_linescan
+          r_new = sqrt(sum(abs(obj.LaserPosition_img - obj.CleaningCenter).^2)) ;
+          if r_new < obj.CleaningRadius*1e3
+            obj.CleaningSummaryData.counter = obj.CleaningSummaryData.counter+1;
+            obj.CleaningSummaryData.LaserEnergy(obj.CleaningSummaryData.counter) = obj.LaserEnergy ;
+            obj.CleaningSummaryData.LaserFluence(obj.CleaningSummaryData.counter) = obj.LaserFluence ;
+          end
           switch obj.CleaningStartPosition
             case {1,3} % horizontal moves
-              xm_new = caget(obj.pvs.lsr_posx) ; % current mirror command position
-              if xm_new >= shutoutpos(1) && xm_new <= shutoutpos(2)
+              xm_new = obj.LaserPosition_img(1) ; % current position
+              if r_new < obj.CleaningRadius*1e3
                 OpenShutterAndVerify(obj);
+                shopen=true;
               else
                 CloseShutterAndVerify(obj);
               end
@@ -588,10 +648,25 @@ classdef F2_CathodeServicesApp < handle
               else
                 obj.CleaningColNum = nstep ;
               end
+              % Force trajectory on vertical axis
+              if ~isempty(vref) && obj.orthcorrect && ~shopen
+                dy = vref - obj.LaserPosition_img(2) ;
+%                 fprintf('dy= %g movecount= %d\n',dy,movecount);
+                if abs(dy)>obj.motrbktol
+                  mstopped=caget(obj.pvs.lsr_motion);
+                  if mstopped{2}==1
+                    caput(obj.pvs.lsr_yvel,obj.MotorVeloHome);
+                    caput(obj.pvs.moty_bvelo,obj.MotorVeloHome/abs(obj.VCC_mirrcal(4)));
+                    ymr = caget(obj.pvs.lsr_ymov) ;
+                    caput(obj.pvs.lsr_ymov,ymr+dy/2);
+                  end
+                end
+              end
             case {2,4} % vertical moves
-              ym_new = caget(obj.pvs.lsr_posy) ; % current mirror command position
-              if ym_new >= shutoutpos(1) && ym_new <= shutoutpos(2)
+              ym_new = obj.LaserPosition_img(2) ; % current position
+              if r_new < obj.CleaningRadius*1e3
                 OpenShutterAndVerify(obj);
+                shopen=true;
               else
                 CloseShutterAndVerify(obj);
               end
@@ -600,6 +675,19 @@ classdef F2_CathodeServicesApp < handle
                 obj.CleaningLineNum = obj.CleaningNumLines(obj.CleaningColNum) ;
               else
                 obj.CleaningLineNum = nstep ;
+              end
+              % Force trajectory on horizontal axis
+              if ~isempty(href) && obj.orthcorrect && ~shopen
+                dx = href - obj.LaserPosition_img(1) ;
+                if abs(dx)>obj.motrbktol
+                  mstopped=caget(obj.pvs.lsr_motion);
+                  if mstopped{1}==1
+                    caput(obj.pvs.lsr_xvel,obj.MotorVeloHome);
+                    caput(obj.pvs.motx_bvelo,obj.MotorVeloHome/abs(obj.VCC_mirrcal(3)));
+                    xmr = caget(obj.pvs.lsr_xmov) ;
+                    caput(obj.pvs.lsr_xmov,xmr+dx/2);
+                  end
+                end
               end
           end
         end
@@ -610,6 +698,15 @@ classdef F2_CathodeServicesApp < handle
       
       switch cstate % take action based on current state
         case 0 % Start process actions
+          vref=[]; href=[]; movecount=0;
+          fprintf('Laser Cleaning Start: %s\n',datestr(now));
+          ndata = (obj.CleaningTimeRemaining-obj.bonustime) * 60 * obj.pvs.ArrayRate ;
+          % Initialize summary data
+          obj.CleaningSummaryData.counter=0;
+          obj.CleaningSummaryData.start = now;
+          obj.CleaningSummaryData.LaserEnergy = zeros(1,ndata,'like',obj.LaserEnergy);
+          obj.CleaningSummaryData.LaserFluence = zeros(1,ndata,'like',obj.LaserFluence);
+          
           % Telescope should be inserted (small spot size on cathode)
           if strcmp(obj.pvs.laser_telescope.val{1},'OUT')
             if isempty(whan) || ~ishandle(whan)
@@ -650,12 +747,15 @@ classdef F2_CathodeServicesApp < handle
           end
           if obj.CleaningColNum>1 || obj.CleaningLineNum>1
             cstate = 3 ;
+            usenext=false;
           else
             cstate = 1 ;
+            usenext=false;
           end
           obj.State = CathodeServicesState.Cleaning_movingtonewline ; % watchdog method will repeatedly call this function until aborted
           fprintf(obj.STDOUT,'%s: Cleaning: start\n',datetime);
         case 1 % move to start position
+          vref=[]; href=[]; movecount=0;
           obj.ShutterCloseOveride = true ; % don't open shutter until on auto pattern path
           obj.State = CathodeServicesState.Cleaning_movingtonewline ;
           adist = obj.AcclDist ; % distance to accelerate to full velocity [mm]
@@ -684,34 +784,36 @@ classdef F2_CathodeServicesApp < handle
           elseif dest(2)>ylim(2)
             dest(2)=ylim(2);
           end
-          posnow = [caget(obj.pvs.lsr_posx) caget(obj.pvs.lsr_posy)];
+          posnow = obj.LaserPosition_img;
           reqmove = dest - posnow ;
           if any(abs(reqmove)>obj.motrbktol)
             obj.movemirror(reqmove,"fast");
           else % done with this move
             cstate = 2 ;
+            usenext=false;
           end
           obj.ClearPIMG; % clear integrated image
           fprintf(obj.STDOUT,'%s: Cleaning: move to start position\n',datetime);
         case 2 % Move along next line or column
           obj.ShutterCloseOveride = true ; % Automatically opens shutter when over cleaning area (starts just outside)
           obj.State = CathodeServicesState.Cleaning_linescan ;
-          xm = caget(obj.pvs.lsr_posx) ;
-          ym = caget(obj.pvs.lsr_posy) ; % current mirror command position
+          xm = obj.LaserPosition_img(1) ;
+          ym = obj.LaserPosition_img(2) ; % current position
           adist = obj.AcclDist ; % distance to accelerate to full velocity [mm]
           switch obj.CleaningStartPosition
             case {1,3} % horizontal moves
+              href=[];
+              vref=ym;
               crdlen=double(obj.CleaningNumCols(obj.CleaningLineNum))*obj.CleaningStepSize*1e3; % length of circle cord at this vertical position
               if xm<(boundary(1)+boundary(3)/2) % move in +ve x direction
                 reqmove = [crdlen+2*adist(1) 0] ;
-                shutoutpos = [xm+adist(1) xm+crdlen+adist(1)] ; % x coordinates to open laser shutter
               else % move in -ve x direction
                 reqmove = [-crdlen-2*adist(1) 0] ;
-                shutoutpos = [xm-crdlen-adist(1) xm-adist(1)] ; % x coordinates to open laser shutter
               end
               fprintf(obj.STDOUT,'%s: Cleaning: line # %d (of %d)\n',datetime,obj.CleaningLineNum,obj.CleaningNumLines);
               if obj.CleaningLineNum == obj.CleaningNumLines
                 cstate = 4 ; % done
+                usenext=false;
                 obj.CleaningColNum = 1 ; obj.CleaningLineNum = 1 ;
                 if obj.CleaningStartPosition ==4 
                   obj.CleaningStartPosition = 1 ;
@@ -722,15 +824,16 @@ classdef F2_CathodeServicesApp < handle
               else
                 obj.CleaningLineNum = obj.CleaningLineNum + 1 ;
                 cstate = 3 ; % move to next line when move finished
+                usenext=false;
               end
             case {2,4} % vertical moves
+              href=xm;
+              vref=[];
               crdlen=double(obj.CleaningNumLines(obj.CleaningColNum))*obj.CleaningStepSize*1e3; % length of circle cord at this horizontal position
               if ym<(boundary(2)+boundary(4)/2) % move in +ve y direction
                 reqmove = [0 crdlen+2*adist(2)] ;
-                shutoutpos = [ym+adist(2) ym+crdlen+adist(2)] ; % x coordinates to open laser shutter
               else % move in -ve y direction
                 reqmove = [0 -crdlen-2*adist(2)] ;
-                shutoutpos = [ym-crdlen-adist(2) ym-adist(2)] ; % x coordinates to open laser shutter
               end
               fprintf(obj.STDOUT,'%s: Cleaning: column # %d (of %d)\n',datetime,obj.CleaningColNum,obj.CleaningNumCols);
               if obj.CleaningColNum == obj.CleaningNumCols
@@ -745,23 +848,27 @@ classdef F2_CathodeServicesApp < handle
               else
                 obj.CleaningColNum = obj.CleaningColNum + 1 ;
                 cstate = 3 ; % move to next line when move finished
+                usenext=false;
               end
           end
-%           line(obj.gui.UIAxes,shutoutpos,[ym ym],'LineWidth',2);
           obj.movemirror(reqmove);
+          movecount = movecount+1;
         case 3 % Move to beginning of next line or column
+          vref=[]; href=[]; movecount=0;
           obj.State = CathodeServicesState.Cleaning_movingtonewline ;
           obj.ShutterCloseOveride = true ;
-          xm = caget(obj.pvs.lsr_posx) ;
-          ym = caget(obj.pvs.lsr_posy) ; % current mirror command position
+          xm = obj.LaserPosition_img(1) ;
+          ym = obj.LaserPosition_img(2) ; % current position
           adist = obj.AcclDist ; % distance to accelerate to full velocity [mm]
           switch obj.CleaningStartPosition
             case 1 % horizontal moves, starting from bottom
               crdlen=double(obj.CleaningNumCols(obj.CleaningLineNum))*obj.CleaningStepSize*1e3; % length of circle cord at this vertical position
               if xm<(boundary(1)+boundary(3)/2) % next move in +ve x direction
                 dest = [boundary(1)+boundary(3)/2-crdlen/2-adist(1) boundary(2)+obj.CleaningStepSize*1e3*double(obj.CleaningLineNum-1)+(obj.CleaningStepSize/2)*1e3] ;
+                destnext = dest; destnext(1)=destnext(1)+obj.adistadd;
               else % next move in -ve x direction
                 dest = [boundary(1)+boundary(3)/2+crdlen/2+adist(1) boundary(2)+obj.CleaningStepSize*1e3*double(obj.CleaningLineNum-1)+(obj.CleaningStepSize/2)*1e3] ;
+                destnext = dest; destnext(1)=destnext(1)-obj.adistadd;
               end
               fprintf(obj.STDOUT,'%s: Cleaning: move to line # %d (of %d)\n',datetime,obj.CleaningLineNum,obj.CleaningNumLines);
             case 3
@@ -769,24 +876,30 @@ classdef F2_CathodeServicesApp < handle
               crdlen=double(obj.CleaningNumCols(obj.CleaningLineNum))*obj.CleaningStepSize*1e3; % length of circle cord at this vertical position
               if xm<(boundary(1)+boundary(3)/2) % next move in +ve x direction
                 dest = [boundary(1)+boundary(3)/2-crdlen/2-adist(1) boundary(2)+boundary(4)-obj.CleaningStepSize*1e3*double(obj.CleaningLineNum-1)-(obj.CleaningStepSize/2)*1e3] ;
+                destnext = dest; destnext(1)=destnext(1)+obj.adistadd;
               else % next move in -ve x direction
                 dest = [boundary(1)+boundary(3)/2+crdlen/2+adist(1) boundary(2)+boundary(4)-obj.CleaningStepSize*1e3*double(obj.CleaningLineNum-1)-(obj.CleaningStepSize/2)*1e3] ;
+                destnext = dest; destnext(1)=destnext(1)-obj.adistadd;
               end
               fprintf(obj.STDOUT,'%s: Cleaning: move to line # %d (of %d)\n',datetime,obj.CleaningLineNum,obj.CleaningNumLines);
             case 2 % vertical moves, starting on left
               crdlen=double(obj.CleaningNumLines(obj.CleaningColNum))*obj.CleaningStepSize*1e3; % length of circle cord at this horizontal position
               if ym<(boundary(2)+boundary(4)/2) % next move in +ve y direction
                 dest = [boundary(1)+obj.CleaningStepSize*1e3*double(obj.CleaningColNum-1)+(obj.CleaningStepSize/2)*1e3 boundary(2)+boundary(4)/2-crdlen/2-adist(2)] ;
+                destnext = dest; destnext(2)=destnext(2)+obj.adistadd;
               else % next move in -ve y direction
                 dest = [boundary(1)+obj.CleaningStepSize*1e3*double(obj.CleaningColNum-1)+(obj.CleaningStepSize/2)*1e3 boundary(2)+boundary(4)/2+crdlen/2+adist(2)] ;
+                destnext = dest; destnext(2)=destnext(2)-obj.adistadd;
               end
               fprintf(obj.STDOUT,'%s: Cleaning: move to column # %d (of %d)\n',datetime,obj.CleaningColNum,obj.CleaningNumCols);
             case 4 % vertical moves, starting on right
               crdlen=double(obj.CleaningNumLines(obj.CleaningColNum))*obj.CleaningStepSize*1e3; % length of circle cord at this horizontal position
               if ym<(boundary(2)+boundary(4)/2) % next move in +ve y direction
                 dest = [boundary(1)+boundary(3)-obj.CleaningStepSize*1e3*double(obj.CleaningColNum-1)-(obj.CleaningStepSize/2)*1e3 boundary(2)+boundary(4)/2-crdlen/2-adist(2)] ;
+                destnext = dest; destnext(2)=destnext(2)+obj.adistadd;
               else % next move in -ve y direction
                 dest = [boundary(1)+boundary(3)-obj.CleaningStepSize*1e3*double(obj.CleaningColNum-1)-(obj.CleaningStepSize/2)*1e3 boundary(2)+boundary(4)/2+crdlen/2+adist(2)] ;
+                destnext = dest; destnext(2)=destnext(2)-obj.adistadd;
               end
               fprintf(obj.STDOUT,'%s: Cleaning: move to column # %d (of %d)\n',datetime,obj.CleaningColNum,obj.CleaningNumCols);
           end
@@ -801,18 +914,27 @@ classdef F2_CathodeServicesApp < handle
           elseif dest(2)>ylim(2)
             dest(2)=ylim(2);
           end
-          posnow = [caget(obj.pvs.lsr_posx) caget(obj.pvs.lsr_posy)];
-          reqmove = dest - posnow ;
+          posnow = obj.LaserPosition_img;
+          if usenext
+            reqmove = destnext - posnow ;
+          else
+            reqmove = dest - posnow ;
+          end
           if any(abs(reqmove)>obj.motrbktol)
             disp(reqmove)
             obj.movemirror(reqmove);
+%           elseif ~usenext
+%             usenext=true;
           else % done with this move
             cstate = 2 ;
+            usenext=false;
           end
         case 4 % Cleaning complete, move back to center
+          fprintf('Laser Cleaning Finish: %s\n',datestr(now))
+          href=[]; vref=[]; movecount=0; usenext=false;
           obj.ShutterCloseOveride = true ;
           CloseShutterAndVerify(obj) ;
-          if any( abs( obj.CleaningCenter - obj.LaserPosition_mot ) > obj.motrbktol )
+          if any( abs( obj.CleaningCenter - obj.LaserPosition_img ) > obj.motrbktol )
             obj.movemirror("home");
           else % done with this move
             cstate = 0 ;
@@ -820,10 +942,11 @@ classdef F2_CathodeServicesApp < handle
             obj.ShutterCloseOveride = false ;
           end
           fprintf(obj.STDOUT,'%s: Cleaning: finishing\n',datetime);
+          obj.CleaningSummaryData.finish = now;
       end
     end
     function Proc_Cleaning_testpattern(obj,varargin)
-      persistent tpstate boundary1 boundary2 whan
+      persistent tpstate boundary1 boundary2 whan shutcall vref href movecount
       %PROC_CLEANING_TESTPATTERN Process a test calibration autopattern
       %Proc_Cleaning_testpattern(newstate) Process current test pattern state with CathodeServicesState.Cleaning_testpattern or CathodeServicesState.Cleaning_setenergypattern
       %Proc_Cleaning_testpattern("SetTestBoundary",[x0 y0 w h]) Set cleaning pattern boundaries (Matlab rectangle function pos format)
@@ -832,7 +955,9 @@ classdef F2_CathodeServicesApp < handle
       % Initialize state
       if isempty(tpstate)
         tpstate=0;
+        shutcall=true(1,8);
       end
+      movecount=0;
       
       % Process boundary set command
       if nargin>1
@@ -856,13 +981,41 @@ classdef F2_CathodeServicesApp < handle
           boundary=boundary2;
       end
       
-      % If laser motion currently in progress, no further action required, otherwise shutter should be closed
+      % If laser motion currently in progress, unless moving diagonally then force orthogonal axis to be fixed
       if ~obj.LaserMotorStopped
+        switch tpstate
+          case {2,4} % vertical moves along test pattern rectangle
+            if ~isempty(href) && obj.orthcorrect && movecount==1
+              dx = href - obj.LaserPosition_img(1) ;
+              if abs(dx)>obj.motrbktol
+                mstopped=caget(obj.pvs.lsr_motion);
+                if mstopped{1}==1
+                  caput(obj.pvs.lsr_xvel,obj.MotorVeloHome);
+                  xm = caget(obj.pvs.lsr_xmov) ;
+                  caput(obj.pvs.lsr_xmov,xm+dx/4);
+                end
+              end
+            end
+          case {3,5} % horizontal moves along test pattern rectangle
+            if ~isempty(vref) && obj.orthcorrect && movecount==1
+              dy = vref - obj.LaserPosition_img(2) ;
+              if abs(dy)>obj.motrbktol
+                mstopped=caget(obj.pvs.lsr_motion);
+                if mstopped{2}==1
+                  caput(obj.pvs.lsr_yvel,obj.MotorVeloHome);
+                  ym = caget(obj.pvs.lsr_ymov) ;
+                  caput(obj.pvs.lsr_ymov,ym+dy/4);
+                end
+              end
+            end
+        end
         return
       end
       
       switch tpstate % take action based on current state
         case 0 % Start process actions
+          href=[]; vref=[]; movecount=0;
+          shutcall=true(1,8);
           % Telescope should be inserted (small spot size on cathode)
           if strcmp(obj.pvs.laser_telescope.val{1},'OUT')
             if isempty(whan) || ~ishandle(whan)
@@ -897,9 +1050,10 @@ classdef F2_CathodeServicesApp < handle
           obj.State = newstate ; % watchdog method will repeatedly call this function until aborted
           fprintf(obj.STDOUT,'%s: Cleaning_testpattern: start\n',datetime);
         case 1 % move to right edge of test pattern square from center
+          vref=[]; href=[]; movecount=0;
           obj.ShutterCloseOveride = true ; % don't open shutter until on auto pattern path
           dest = [boundary(1)+boundary(3) boundary(2)+boundary(4)/2] ;
-          reqmove = dest - obj.LaserPosition_mot ;
+          reqmove = dest - obj.LaserPosition_img ;
           if any(abs(reqmove)>obj.motrbktol)
             obj.movemirror(reqmove,"fast");
           else % done with this move
@@ -908,48 +1062,77 @@ classdef F2_CathodeServicesApp < handle
           obj.ClearPIMG();
           fprintf(obj.STDOUT,'%s: Cleaning_testpattern: step 1\n',datetime);
         case 2 % move to top-right of test pattern square
+          if obj.State ~= CathodeServicesState.Cleaning_testpattern && shutcall(2) % open shutter for first move only
+            OpenShutterAndVerify(obj);
+            shutcall(2)=false;
+          end
           obj.ShutterCloseOveride = false ; % ok to open shutter when moving now
           dest = [boundary(1)+boundary(3) boundary(2)+boundary(4)] ;
-          reqmove = dest - obj.LaserPosition_mot ;
+          reqmove = dest - obj.LaserPosition_img ;
+          href = obj.LaserPosition_img(1) ;
           if any(abs(reqmove)>obj.motrbktol)
             obj.movemirror(reqmove);
+            movecount=movecount+1;
           else % done with this move
             tpstate = 3 ;
+            movecount=0;
           end
           obj.ClearPIMG();
           fprintf(obj.STDOUT,'%s: Cleaning_testpattern: step 2\n',datetime);
         case 3 % move to top-left of test pattern square
+          if obj.State ~= CathodeServicesState.Cleaning_testpattern && shutcall(3) % open shutter for first move only
+            OpenShutterAndVerify(obj);
+            shutcall(3)=false;
+          end
           obj.ShutterCloseOveride = false ; % ok to open shutter when moving now
           dest = [boundary(1) boundary(2)+boundary(4)] ;
-          reqmove = dest - obj.LaserPosition_mot ;
+          reqmove = dest - obj.LaserPosition_img ;
+          vref=obj.LaserPosition_img(2);
           if any(abs(reqmove)>obj.motrbktol)
             obj.movemirror(reqmove);
+            movecount=movecount+1;
           else % done with this move
             tpstate = 4 ;
+            movecount=0;
           end
           obj.ClearPIMG();
           fprintf(obj.STDOUT,'%s: Cleaning_testpattern: step 3\n',datetime);
         case 4 % move to bottom-left of test pattern square
+          if obj.State ~= CathodeServicesState.Cleaning_testpattern && shutcall(4) % open shutter for first move only
+            OpenShutterAndVerify(obj);
+            shutcall(4)=false;
+          end
           obj.ShutterCloseOveride = false ; % ok to open shutter when moving now
           dest = [boundary(1) boundary(2)] ;
-          reqmove = dest - obj.LaserPosition_mot ;
+          reqmove = dest - obj.LaserPosition_img ;
+          href=obj.LaserPosition_img(1);
           if any(abs(reqmove)>obj.motrbktol)
             obj.movemirror(reqmove);
+            movecount=movecount+1;
           else % done with this move
             tpstate = 5 ;
+            movecount=0;
           end
           obj.ClearPIMG();
           fprintf(obj.STDOUT,'%s: Cleaning_testpattern: step 4\n',datetime);
         case 5 % move to bottom-right of test pattern square
+          if obj.State ~= CathodeServicesState.Cleaning_testpattern && shutcall(5) % open shutter for first move only
+            OpenShutterAndVerify(obj);
+            shutcall(5)=false;
+          end
           obj.ShutterCloseOveride = false ; % ok to open shutter when moving now
           dest = [boundary(1)+boundary(3) boundary(2)] ;
-          reqmove = dest - obj.LaserPosition_mot ;
+          reqmove = dest - obj.LaserPosition_img ;
+          vref=obj.LaserPosition_img(2);
           if any(abs(reqmove)>obj.motrbktol)
             obj.movemirror(reqmove);
+            movecount=movecount+1;
           else % done with this move
+            movecount=0;
             if obj.State == CathodeServicesState.Cleaning_testpattern % include diagonal moves for test pattern, not for energy set pattern
               tpstate = 6 ;
             else
+              shutcall=true(1,8);
               tpstate = 2 ;
             end
           end
@@ -958,7 +1141,7 @@ classdef F2_CathodeServicesApp < handle
         case 6 % move diagonally to top-left
           obj.ShutterCloseOveride = false ; % ok to open shutter when moving now
           dest = [boundary(1) boundary(2)+boundary(4)] ;
-          reqmove = dest - obj.LaserPosition_mot ;
+          reqmove = dest - obj.LaserPosition_img ;
           if any(abs(reqmove)>obj.motrbktol)
             obj.movemirror(reqmove);
           else % done with this move
@@ -969,7 +1152,7 @@ classdef F2_CathodeServicesApp < handle
         case 7 % move diagonally to bottom-right
           obj.ShutterCloseOveride = false ; % ok to open shutter when moving now
           dest = [boundary(1)+boundary(3) boundary(2)] ;
-          reqmove = dest - obj.LaserPosition_mot ;
+          reqmove = dest - obj.LaserPosition_img ;
           if any(abs(reqmove)>obj.motrbktol)
             obj.movemirror(reqmove);
           else % done with this move
@@ -978,11 +1161,12 @@ classdef F2_CathodeServicesApp < handle
           obj.ClearPIMG();
           fprintf(obj.STDOUT,'%s: Cleaning_testpattern: step 7\n',datetime);
         case 8 % stop process and return to center of cleaning pattern area
+          movecount=0;
           obj.ShutterCloseOveride = true ; % don't open shutter until on auto pattern path
           CloseShutterAndVerify(obj) ;
           obj.ClearPIMG(); % Clear integrated image data
           dest = obj.CleaningCenter ;
-          reqmove = dest - obj.LaserPosition_mot ;
+          reqmove = dest - obj.LaserPosition_img ;
           if any(abs(reqmove)>obj.motrbktol)
             obj.movemirror("home");
           else % done with this move
@@ -1004,13 +1188,13 @@ classdef F2_CathodeServicesApp < handle
       if ~exist('dpos','var') || ( ~isequal(dpos,"home") && ( ~isnumeric(dpos) || length(dpos)~=2) )
         error('Incorrect movemirror command structure')
       end
-      xm = caget(obj.pvs.lsr_posx) ;
-      ym = caget(obj.pvs.lsr_posy) ; % current mirror command position
+      xm = caget(obj.pvs.lsr_xmov) ;
+      ym = caget(obj.pvs.lsr_ymov) ; % current mirror command position
       if isequal(dpos,"home")
         if obj.gui.TabGroup.SelectedTab ==  obj.gui.TabGroup.Children(1) % Laser Cleaning Tab
-          dpos = obj.CleaningCenter - [xm ym] ;
+          dpos = obj.CleaningCenter - obj.LaserPosition_img ;
         elseif obj.gui.TabGroup.SelectedTab ==  obj.gui.TabGroup.Children(2) % QE Map Tab
-          dpos = obj.MapCenter - [xm ym] ;
+          dpos = obj.MapCenter - obj.LaserPosition_img ;
         end
         vel = obj.MotorVeloHome ;
       elseif exist('cmd','var') && cmd=="fast"
@@ -1021,8 +1205,11 @@ classdef F2_CathodeServicesApp < handle
       if ~any(abs(dpos))>obj.motrbktol
         return
       end
-      caput(obj.pvs.lsr_xvel,vel);
-      caput(obj.pvs.lsr_yvel,vel);
+      if vel<obj.motorsettings(1,4) || vel<obj.motorsettings(2,4)
+        fprintf(2,'Warning, mirror velocity set too low, min velocity used!');
+      end
+      caput(obj.pvs.lsr_xvel,vel); caput(obj.pvs.motx_bvelo,vel/abs(obj.VCC_mirrcal(3)));
+      caput(obj.pvs.lsr_yvel,vel); caput(obj.pvs.moty_bvelo,vel/abs(obj.VCC_mirrcal(4)));
       xnew = xm+dpos(1);
       ynew = ym+dpos(2);
       caput(obj.pvs.lsr_xmov,xnew);
@@ -1083,7 +1270,7 @@ classdef F2_CathodeServicesApp < handle
         isclosed=true;
         return
       end
-      caput(obj.pvs.laser_shutterCtrl,'Yes');
+      caput(obj.pvs.laser_shutterCtrl,'No');
       timeout=3;
       t0=tic;
       isclosed = false ;
@@ -1104,7 +1291,7 @@ classdef F2_CathodeServicesApp < handle
         isopen=true;
         return
       end
-      caput(obj.pvs.laser_shutterCtrl,'No');
+      caput(obj.pvs.laser_shutterCtrl,'Yes');
       timeout=3;
       t0=tic;
       isopen = false ;
@@ -1225,7 +1412,12 @@ classdef F2_CathodeServicesApp < handle
       obj.gui.ccentEdit_y.Value = double(obj.CleaningCenter(2)) ;
       obj.gui.StartPositionKnob.Value = num2str(obj.CleaningStartPosition) ;
       obj.gui.ImageRotation0Menu.Text = sprintf('Image Rotation = %d',obj.imrot);
+      obj.gui.ImageFlipX0Menu.Text = sprintf('Image Flip X = %d',obj.imflipX);
+      obj.gui.ImageFlipY0Menu.Text = sprintf('Image Flip Y = %d',obj.imflipY);
       obj.SetMirrCal(obj.VCC_mirrcal);
+      obj.gui.StartDistance.Text = sprintf('Start Distance = %g',obj.adistadd);
+      obj.gui.OrthBacklash.Checked=obj.orthcorrect;
+      obj.gui.NormalizationMenu.Text = sprintf('Normalization = %s',obj.imgnormalize);
     end
     function SaveImage(obj,fname)
       if ~exist('fname','var')
@@ -1260,9 +1452,37 @@ classdef F2_CathodeServicesApp < handle
       imagesc(han,ld.img,'XData',ld.xdata,'YData',ld.ydata); xlabel(han,'X [mm]'); ylabel(han,'Y [mm]');
       axis(han,'image');
     end
+    function CleaningDataSummary(obj)
+      if ~isempty(obj.CleaningSummaryData) && obj.CleaningSummaryData.counter>0
+        c=false(1,length(obj.CleaningSummaryData.LaserEnergy)); c(1:obj.CleaningSummaryData.counter)=true;
+        txt{1}=sprintf('Cleaning start time: %s',datestr(obj.CleaningSummaryData.start));
+        if isfield(obj.CleaningSummaryData,'finish')
+          txt{2}=sprintf('Cleaning finish time: %s',datestr(obj.CleaningSummaryData.finish));
+        else
+          txt{2}='Cleaning finish time: <unfinished>';
+        end
+        txt{3}=sprintf('Laser energy (joulemeter): mean = %.3f STD = %.3f PK-PK = %.3f (uJ)',...
+          mean(obj.CleaningSummaryData.LaserEnergy(c)),std(obj.CleaningSummaryData.LaserEnergy(c)),range(mean(obj.CleaningSummaryData.LaserEnergy(c))));
+        txt{4}=sprintf('Laser fluence: mean = %.3f STD = %.3f PK-PK = %.3f (uJ/mm^2)',...
+          mean(obj.CleaningSummaryData.LaserFluence(c)),std(obj.CleaningSummaryData.LaserFluence(c)),range(mean(obj.CleaningSummaryData.LaserFluence(c))));
+        msgbox(txt);
+      end
+    end
   end
   % get/set methods
   methods
+    function time = get.bonustime(obj)
+      time = 30 * ( 75 / (obj.CleaningRadius / obj.CleaningStepSize) ) ;
+    end
+    function [xpos,ypos] = GetLaserPos(obj)
+      if obj.UseMirrPos
+        xpos = caget(obj.pvs.lsr_posx) ;
+        ypos = caget(obj.pvs.lsr_posy) ;
+      else
+        xpos = obj.LaserPosition_img(1) ;
+        ypos = obj.LaserPosition_img(2) ;
+      end
+    end
     function SetMirrCal(obj,cal)
       %SETMIRRCAL Set calibration coefficients for mirror position readback
       %SetMirrCal([offX,offY,scalX,scalY]) 
@@ -1272,8 +1492,10 @@ classdef F2_CathodeServicesApp < handle
       obj.VCC_mirrcal=cal;
       obj.pvs.lsr_posx.conv = obj.VCC_mirrcal([3 1]) ;
       obj.pvs.lsr_posy.conv = obj.VCC_mirrcal([4 2]) ;
-      obj.pvs.lsr_xvel.conv = obj.VCC_mirrcal(3) ;
-      obj.pvs.lsr_yvel.conv = obj.VCC_mirrcal(4) ;
+      obj.pvs.lsr_xvel.conv = abs(obj.VCC_mirrcal(3)) ;
+      obj.pvs.lsr_yvel.conv = abs(obj.VCC_mirrcal(4)) ;
+      obj.pvs.lsr_xmov.conv = obj.VCC_mirrcal(3) ;
+      obj.pvs.lsr_ymov.conv = obj.VCC_mirrcal(4) ;
       obj.gui.MotorCALMenu.Text = sprintf('Motor CAL = [%g %g %g %g]',cal) ;
     end
     function SetLimits(obj,par,limits)
@@ -1362,6 +1584,7 @@ classdef F2_CathodeServicesApp < handle
           end
           time = (double(numsteps-stepsdone)*double(obj.CleaningNumPulsesPerStep)) / double(obj.RepRate) / 60 ;
       end
+      time = time + obj.bonustime*(double(numsteps-stepsdone)/double(numsteps)) ; % add end-effects estimate
     end
     function numlines=get.MapNumLines(obj)
       switch obj.MapStartPosition
@@ -1405,15 +1628,12 @@ classdef F2_CathodeServicesApp < handle
           time = (double(numsteps-stepsdone)*double(obj.MapNumPulsesPerStep)) / double(obj.RepRate) / 60 ;
       end
     end
-    function fluence=get.LaserFluence(obj) % uJ/cm^2
-      fluence = obj.LaserEnergy / (1e-2*obj.LaserSpotSize)^2 ;
-    end
     function velo = get.MotorVelo(obj) % mm/s
       t = double(obj.CleaningNumPulsesPerStep) / double(obj.RepRate) ; % time to traverse 1 step size
       velo = (double(obj.CleaningStepSize)*1000) / t ; % velocity in mm / s
     end
     function adist = get.AcclDist(obj) % mm
-      adist = obj.MotorVelo .* [ obj.pvs.lsr_xaccl.val{1} obj.pvs.lsr_yaccl.val{1} ] ;
+      adist = obj.adistadd + obj.MotorVelo .* [ obj.pvs.lsr_xaccl.val{1} obj.pvs.lsr_yaccl.val{1} ] ;
     end
     function freq=get.wd_freq(obj)
       if obj.State == CathodeServicesState.Cleaning_linescan
@@ -1432,6 +1652,24 @@ classdef F2_CathodeServicesApp < handle
         freqerr=0;
       end
     end
+    function set.adistadd(obj,val)
+      % Set distance to add to starting position outside of cleaning circle
+      %  (this is added to acceleration distance required)
+      obj.adistadd=val;
+      % Check added distance doesn't make us start outside CCD area and adjust if necessary
+      xax=[obj.pvs.CCD_x1.val{1} obj.pvs.CCD_x2.val{1}].*1e-3;
+      yax=[obj.pvs.CCD_y1.val{1} obj.pvs.CCD_y2.val{1}].*1e-3; % Axis ranges [mm]
+      cent=obj.CleaningCenter;
+      r=obj.CleaningRadius*1e3;
+      adist=obj.AcclDist;
+      safety=0.15;
+      missval=[(cent(1)-r-adist(1)-safety)-xax(1) xax(2)-(cent(1)+r+adist(1)+safety) (cent(2)-r-adist(2)-safety)-yax(1) yax(2)-(cent(2)+r+adist(2)+safety)];
+      if any(missval<0)
+        newval = val - max(abs(missval(missval<0))) ;
+        if newval<0; newval=0; end
+        obj.adistadd = newval ;
+      end
+    end
     function set.buflen(obj,newlen)
       if newlen<10 || newlen>10000
         return
@@ -1442,7 +1680,7 @@ classdef F2_CathodeServicesApp < handle
         obj.poshistory = nan(4,newlen,'single') ;
         obj.poshistory(:,1:oldlen)=oldvals;
       elseif newlen<oldlen
-        obj.poshistory=obj.poshistory(:,1:newlen);
+        obj.poshistory=obj.poshistory(:,1:newlen); %#ok<*MCSUP>
       end
       obj.buflen=newlen;
     end
@@ -1459,8 +1697,8 @@ classdef F2_CathodeServicesApp < handle
       if obj.wd_running
         return
       end
-      % Limit rate to twice reported laser firing rate 
-      if ~isempty(t0) && toc(t0)<(0.5/obj.RepRate)
+      % Limit rate to twice reported CCD rate 
+      if ~isempty(t0) && toc(t0)<(0.5/obj.CCD_rate)
         return
       end
       obj.wd_running=true;
@@ -1484,6 +1722,7 @@ classdef F2_CathodeServicesApp < handle
         end
         t0=tic;
         obj.gui.EditField_15.Value=obj.wd_freq;
+%         obj.gui.memuse.Value = java.lang.Runtime.getRuntime.freeMemory/1024/1024;
       catch ME
         obj.wd_running=false;
         rethrow(ME)
@@ -1492,8 +1731,22 @@ classdef F2_CathodeServicesApp < handle
     end
     function watchdog(obj,~,~) % called from watchdogUD timer when a PV value changes
       %WATCHDOG Process PV value chages, compute running state and take corresponding actions
-      persistent prevVals repind lastepicswatchdog tic_epicswatchdog lastpos fhan lastStateConsidered sufficientRate
+      persistent prevVals repind lastepicswatchdog tic_epicswatchdog lastpos fhan lastStateConsidered sufficientRate t0wd inerr_tries
 
+      
+      % Force CA updates for 5s to make sure GUI values are correct
+      tt=5;
+      if isempty(t0wd)
+        t0wd=tic;
+      end
+      if ~isnan(t0wd)
+        if toc(t0wd)<tt
+          caget(obj.pvlist,'force');
+        else
+          t0wd=nan;
+        end
+      end
+      
       % Poke EPICS watchdog keepalive PV
       caput(obj.pvs.watchdog_keepalive,1);
       caput(obj.pvs.watchdog_keepalive,1);
@@ -1504,7 +1757,7 @@ classdef F2_CathodeServicesApp < handle
         "Gun RF not OFF",...                                                        % 3
         "EPICS watchdog isalive beacon stopped incrementing",...                    % 4
         "Laser not in motion with shutter OPEN whilst in cleaning mode",...         % 5
-        "Detected laser position mismatches expectation from mirror motors",...     % 6
+        "Laser position error, out of range",...                                    % 6
         "Gun Vacuum Out of range",...                                               % 7
         "Image Intensity Out of range",...                                          % 8
         "Laser energy Out of range",...                                             % 9
@@ -1515,6 +1768,10 @@ classdef F2_CathodeServicesApp < handle
         "Integrated image count too high (motors stuck?)" ] ;                       % 14
       inerr = false(1,length(reasons)) ;
       etxt=""; % Additional error text to display goes here, split character is ";"
+      if isempty(inerr_tries)
+        inerr_tries=zeros(1,length(inerr),'uint8');
+      end
+      maxerrtries=[1 1 1 1 1 3 3 3 3 3 3 1 3 1]; % need this many consecutive errors to cause GUI to go into shutdown state
       
       % Actions to take based on telescope in/out state
       if strcmp(obj.pvs.laser_telescope.val{1},'IN') % telescope inserted (small laser spot)
@@ -1524,9 +1781,12 @@ classdef F2_CathodeServicesApp < handle
         end
       else
         if isautopattern(obj.State)
-          inerr(12) = true ;
+          [inerr,inerr_tries] = obj.procerr(12,maxerrtries,inerr,inerr_tries) ;
         elseif obj.State~=CathodeServicesState.Cleaning_definearea && obj.State~=CathodeServicesState.Standby_opslasermode && obj.State~=CathodeServicesState.QEMap_definearea
           obj.State = CathodeServicesState.Standby_opslasermode ;
+          inerr_tries(12)=0;
+        else
+          inerr_tries(12)=0;
         end
       end
       obj.CCD_stream = obj.pvs.CCD_acq.val{1}==1 & obj.pvs.CCD_acqmode.val{1}==2 ; % is in continuous mode and acquiring?
@@ -1554,21 +1814,21 @@ classdef F2_CathodeServicesApp < handle
       obj.LaserEnergy = obj.pvs.laser_energy.val{1} ;
       obj.LaserPosition_mot = [obj.pvs.lsr_posx.val{1} obj.pvs.lsr_posy.val{1}];
       gunrfon = ~strcmp(obj.pvs.gun_rfstate.val{1},'OFF') ;
-      obj.LaserSpotSize = obj.pvs.CCD_spotsize.val{1} ; % use max(std_x std_y) as circular spot size
+      obj.LaserSpotSize = [obj.pvs.CCD_spotsize.val{1} obj.pvs.CCD_spotsize.val{2}] ;
       obj.ImageIntensity = obj.pvs.CCD_intensity.val{1} ;
       obj.LaserPosition_img = [obj.pvs.CCD_xpos.val{1} obj.pvs.CCD_ypos.val{1}] ;
-      newreprate = obj.pvs.laser_reprate.val{1} ;
-      if newreprate ~= obj.RepRate
+      newreprate = obj.pvs.ArrayRate.val{1} ;
+      if newreprate ~= obj.CCD_rate
         if newreprate<=0
-          obj.RepRate = 30 ;
+          obj.CCD_rate = 30 ;
         else
-          obj.RepRate = newreprate ;
+          obj.CCD_rate = newreprate ;
         end
-        obj.pvlist.pset('timeout',0.01 + 1/double(obj.RepRate));
+        obj.pvlist.pset('timeout',0.01 + 1/double(obj.CCD_rate));
       end
       
       % Store buffered data if requested
-      if obj.bufacq && ( isempty(lastpos) || any(abs(obj.LaserPosition_img-lastpos)>obj.LaserPosition_tol) ) % store positions in history buffer if substantially moved
+      if obj.bufacq && ( isempty(lastpos) || any(abs(obj.LaserPosition_img-lastpos)>0.01) ) % store positions in history buffer if substantially moved
         lastpos = obj.LaserPosition_img ;
         obj.poshistory(1,obj.bufpos) = obj.LaserPosition_img(1) ;
         obj.poshistory(2,obj.bufpos) = obj.LaserPosition_img(2) ;
@@ -1597,7 +1857,7 @@ classdef F2_CathodeServicesApp < handle
       if isempty(lastStateConsidered) || lastStateConsidered~=obj.State % keep same decision until State changes
         lastStateConsidered = obj.State ;
         sufficientRate = true ;
-        if (obj.State == CathodeServicesState.Cleaning_linescan || obj.State == CathodeServicesState.QEMap_linescan) && (obj.wd_freq < obj.RepRate) 
+        if (obj.State == CathodeServicesState.Cleaning_linescan || obj.State == CathodeServicesState.QEMap_linescan) && (obj.wd_freq < obj.CCD_rate) 
           sufficientRate = false ;
         end
       end
@@ -1613,20 +1873,36 @@ classdef F2_CathodeServicesApp < handle
         obj.imdraw(obj.gui.UIAxes) ;
       end
       
+      % Throw error if the laser spot goes off the CCD area
+      xran=[obj.pvs.CCD_x1.val{1}*1e-3-obj.LaserPosition_tol obj.pvs.CCD_x2.val{1}*1e-3+obj.LaserPosition_tol];
+      yran=[obj.pvs.CCD_x1.val{1}*1e-3-obj.LaserPosition_tol obj.pvs.CCD_x2.val{1}*1e-3+obj.LaserPosition_tol];
+      if obj.LaserPosition_mot(1)<xran(1) || obj.LaserPosition_mot(1)>xran(2) || obj.LaserPosition_mot(2)<yran(1) || obj.LaserPosition_mot(2)>yran(2)
+        [inerr,inerr_tries] = obj.procerr(6,maxerrtries,inerr,inerr_tries) ;
+      else
+        inerr_tries(6)=0;
+      end
+      
       % Check for integrated image pixels rising above threshold value- tests if motors got stuck in some way not detected by other means
       if strcmp(obj.gui.TabGroup.SelectedTab.Title,'Laser Cleaning')
         if exist('ABORTREQ','file') || ( ~isempty(obj.pimg) && max(obj.pimg(:)) > ( double(obj.CleaningNumPulsesPerStep) * double(obj.ImageCIntMax) * double(obj.ImageIntensityRange(2)) ) )
-          inerr(14) = true ;
+          [inerr,inerr_tries] = obj.procerr(14,maxerrtries,inerr,inerr_tries) ;
+          fprintf('Integrated image count = %g\n',max(obj.pimg(:)))
+        else
+          inerr_tries(14)=0;
         end
       else
         if exist('ABORTREQ','file') || ( ~isempty(obj.pimg) && max(obj.pimg(:)) > ( double(obj.MapNumPulsesPerStep) * double(obj.ImageCIntMax) * double(obj.ImageIntensityRange(2)) ) )
-          inerr(14) = true ;
+          [inerr,inerr_tries] = obj.procerr(14,maxerrtries,inerr,inerr_tries) ;
+        else
+          inerr_tries(14)=0;
         end
       end
       
       % CCD image should be streaming in auto pattern moving States, check that here
       if isautopattern(obj.State) && ~obj.CCD_stream
-        inerr(1) = true ;
+        [inerr,inerr_tries] = obj.procerr(1,maxerrtries,inerr,inerr_tries) ;
+      else
+        inerr_tries(1)=0;
       end
       
       % Check watched values are changing
@@ -1655,7 +1931,9 @@ classdef F2_CathodeServicesApp < handle
           for irep=find(repind>=nrepmax)
             etxt=etxt+sprintf(">%d Repeated readings for %s;",nrepmax,watchpv(irep));
           end
-          inerr(2) = true ;
+          [inerr,inerr_tries] = obj.procerr(2,maxerrtries,inerr,inerr_tries) ;
+        else
+          inerr_tries(2)=0;
         end
       end
       
@@ -1667,63 +1945,87 @@ classdef F2_CathodeServicesApp < handle
       % Check EPICS watchdog running (check at <1Hz, and command autostop if in an automatic operating mode)
       if isempty(tic_epicswatchdog) || toc(tic_epicswatchdog)>1.5
         if ~isempty(lastepicswatchdog) && epicswatchdog==lastepicswatchdog
-          inerr(4) = true ;
+          [inerr,inerr_tries] = obj.procerr(4,maxerrtries,inerr,inerr_tries) ;
           obj.gui.RunningLamp.Color='red';
           tic_epicswatchdog=tic;
         else
+          inerr_tries(4)=0;
           obj.gui.RunningLamp.Color='green';
           tic_epicswatchdog=tic;
         end
         lastepicswatchdog=epicswatchdog;
       end
       
-      % If in small spot mode, shutter should only be open when laser in motion
-       % If laser motion currently in progress, no further action required, otherwise shutter should be closed
-      if obj.State ~= CathodeServicesState.Standby_opslasermode
-        if obj.LaserMotorStopped==1 && ~obj.CloseShutterAndVerify
-          inerr(5) = true ;
-        end
+      % shutter should only be open when laser in motion
+      if obj.LaserMotorStopped==1 && isautopattern(obj.State) && ~obj.CloseShutterAndVerify
+        [inerr,inerr_tries] = obj.procerr(5,maxerrtries,inerr,inerr_tries) ;
+      else
+        inerr_tries(5)=0;
       end
       
       % Check laser is where the mirror motors say it is (error if auto pattern and if not calibrating this)
       if any(abs(obj.LaserPosition_img-obj.LaserPosition_mot)>obj.LaserPosition_tol)
-        if obj.State~=CathodeServicesState.Cleaning_testpattern && caget(obj.pvs.laser_shutterStatIn) && ~obj.ShutterCloseOveride
-          inerr(11) = true ;
+        if obj.State~=CathodeServicesState.Cleaning_testpattern && caget(obj.pvs.laser_shutterStatOut)
+          [inerr,inerr_tries] = obj.procerr(11,maxerrtries,inerr,inerr_tries) ;
+        else
+          inerr_tries(11)=0;
         end
         obj.gui.InrangeLamp.Color='red';
       else
+        inerr_tries(11)=0;
         obj.gui.InrangeLamp.Color='green';
       end
       
       % Check values in range
       if obj.GunVacuum > obj.GunVacuumRange(2) || obj.GunVacuum < obj.GunVacuumRange(1)
         etxt=etxt+sprintf("Gun Vacuum Out of range: val= %g range= [%g %g];",obj.GunVacuum,obj.GunVacuumRange);
-        inerr(7) = true ;
+        [inerr,inerr_tries] = obj.procerr(7,maxerrtries,inerr,inerr_tries) ;
+      else
+        inerr_tries(7)=0;
       end
-      if obj.ImageIntensity > obj.ImageIntensityRange(2)
+      if obj.ImageIntensity < obj.ImageIntensityRange(1) || obj.ImageIntensity > obj.ImageIntensityRange(2)
         etxt=etxt+sprintf("Image Intensity Out of range: val= %g range= [%g %g];",obj.ImageIntensity,obj.ImageIntensityRange);
-        inerr(8) = true ;
+        [inerr,inerr_tries] = obj.procerr(8,maxerrtries,inerr,inerr_tries) ;
+      else
+        inerr_tries(8)=0;
       end
       if obj.LaserEnergy < obj.LaserEnergyRange(1) || obj.LaserEnergy > obj.LaserEnergyRange(2)
         etxt=etxt+sprintf("Laser energy Out of range: val= %g range= [%g %g];",obj.LaserEnergy,obj.LaserEnergyRange);
-        inerr(9) = true ;
+        [inerr,inerr_tries] = obj.procerr(9,maxerrtries,inerr,inerr_tries) ;
+      else
+        inerr_tries(9)=0;
       end
-      if obj.LaserSpotSize < obj.LaserSpotSizeRange(1)
-        etxt=etxt+sprintf("Laser spot size Out of range: val= %g range= [%g %g];",obj.LaserSpotSize,obj.LaserSpotSizeRange);
-        inerr(10) = true ;
+      if any(obj.LaserSpotSize < obj.LaserSpotSizeRange(1))
+        etxt=etxt+sprintf("Laser spot size Out of range: val= %g range= [%g %g];",min(obj.LaserSpotSize),obj.LaserSpotSizeRange);
+        [inerr,inerr_tries] = obj.procerr(10,maxerrtries,inerr,inerr_tries) ;
+      else
+        inerr_tries(10)=0;
       end
+      
+      % Check alarms
+      if obj.pvs.laser_energy.isalarm
+        etxt=etxt+"Alarm on laser energy readback PV;";
+        inerr(9)=true;
+      end
+      if obj.pvs.gun_vacuum.isalarm
+        etxt=etxt+"Alarm on Gun Vacuum readback PV;";
+        inerr(7)=true;
+      end
+      
       % Deal with laser fluence update and range checking
       fluence = obj.LaserFluence ;
       obj.gui.Gauge_3.Value = double(fluence) ;
       if fluence<obj.LaserFluenceRange(1) || fluence>obj.LaserFluenceRange(2)
         obj.gui.Gauge_3.BackgroundColor=[0.7 0 0];
-        inerr(13) = true ;
+        [inerr,inerr_tries] = obj.procerr(13,maxerrtries,inerr,inerr_tries) ;
       else
+        inerr_tries(13)=0;
         obj.gui.Gauge_3.BackgroundColor=[1 1 1];
       end
       
-      % If in error state, check shutter off and control disabled if in auto mode: if laser fluence limit exeeded stop anyway
-      if ( fluence>obj.LaserFluenceRange(2) || any(inerr) ) && ~caget(obj.pvs.laser_shutterStatIn)
+      % If in error state, check shutter off and control disabled if in auto mode
+      if any(inerr) && ~caget(obj.pvs.laser_shutterStatIn)
+        inerr_tries=zeros(size(inerr_tries)); % reset error counter
         obj.AutoStop(reasons(inerr),etxt);
       else
         txt = text(obj.State) ;
@@ -1767,8 +2069,10 @@ classdef F2_CathodeServicesApp < handle
       end
       
       % force drawnow?
-      if obj.dnCMD
+      if obj.dnCMD || ~obj.gui.DetachButton.Value
         drawnow;
+      else
+        drawnow limitrate
       end
       
     end
@@ -1781,12 +2085,124 @@ classdef F2_CathodeServicesApp < handle
       if obj.imrot>0 % rotate image by multiples of 90 degrees
         img=rot90(img,obj.imrot);
       end
+      if obj.imflipX
+        img=fliplr(img);
+      end
+      if obj.imflipY
+        img=flipud(img);
+      end
+      
+      % Replace spot size and centroid with local calculation - EPICS value
+      xax=[obj.pvs.CCD_x1.val{1} obj.pvs.CCD_x2.val{1}].*1e-3; yax=[obj.pvs.CCD_y1.val{1} obj.pvs.CCD_y2.val{1}].*1e-3;
+      xvals = linspace(xax(1),xax(2),nx) ; yvals = linspace(yax(1),yax(2),ny) ;
+      cx = obj.LaserPosition_img(1) ; cy = obj.LaserPosition_img(2) ;
+      try
+        [fx,fy]=getFWHM(img,xvals,yvals,obj.LaserPosition_img(1),obj.LaserPosition_img(2),obj.LaserSpotSize(1)*1e-3,obj.LaserSpotSize(2)*1e-3);
+      catch
+        fx=obj.LaserSpotSize(1)*1e-3; fy=obj.LaserSpotSize(2)*1e-3;
+      end
+      if isnan(fx); fx=obj.LaserSpotSize(1); end
+      if isnan(fy); fy=obj.LaserSpotSize(2); end
+      xcut = find(xvals > cx-fx*6 & xvals < cx+fx*6) ;
+      ycut = find(yvals > cy-fy*6 & yvals < cy+fx*6) ;
+      xproj=sum(img,1); yproj=sum(img,2);
+      try
+        myint=zeros(1,2);
+        [~,q]=gauss_fit(xvals(xcut),xproj(xcut)); obj.LaserSpotSize(1)=obj.std2fwhm*abs(q(4))*1000; obj.LaserPosition_img(1)=q(3);
+        myint(1)=q(2);
+        [~,q]=gauss_fit(xvals(ycut),yproj(ycut)); obj.LaserSpotSize(2)=obj.std2fwhm*abs(q(4))*1000; obj.LaserPosition_img(2)=q(3);
+        myint(2)=q(2);
+        obj.ImageIntensity = mean(myint./[sum(xcut) sum(ycut)]) ;
+      catch
+        fprintf('Gauss fit fail, using EPICS spot size values\n');
+      end
+      
+      % Calculate Laser Fluence
+      obj.LaserFluence = 1e6 * obj.LaserEnergy / prod(obj.LaserSpotSize) ;
+      
+      % Write to PVs
+      caput(obj.pvs.CCD_xspotsize_out,double(obj.LaserSpotSize(1)));
+      caput(obj.pvs.CCD_yspotsize_out,double(obj.LaserSpotSize(2)));
+      caput(obj.pvs.CCD_xpos_out,double(obj.LaserPosition_img(1)));
+      caput(obj.pvs.CCD_ypos_out,double(obj.LaserPosition_img(2)));
+      caput(obj.pvs.CCD_intensity_out,double(obj.ImageIntensity));
+      % Write to GUI
+      obj.gui.EditField_11.Value=double(obj.LaserPosition_img(1));
+      obj.gui.EditField_12.Value=double(obj.LaserPosition_img(2));
+      obj.gui.EditField_4.Value=double(obj.ImageIntensity);
+      obj.gui.ImageIntensityGauge.Value=double(obj.ImageIntensity);
+      lims=obj.pvs.CCD_intensity.limits;
+      if ~isempty(lims)
+        if obj.ImageIntensity<lims(1) || obj.ImageIntensity>lims(2)
+          obj.gui.EditField_4.BackgroundColor=[0.7 0 0];
+          obj.gui.ImageIntensityGauge.BackgroundColor=[0.7 0 0];
+        else
+          obj.gui.EditField_4.BackgroundColor=[0 0 0];
+          obj.gui.ImageIntensityGauge.BackgroundColor=[1 1 1];
+        end
+      end
+      lims=obj.pvs.CCD_spotsize.limits;
+      obj.gui.LaserSpotSizeX.Value = double(round(obj.LaserSpotSize(1))) ;
+      obj.gui.LaserSpotSizeY.Value = double(round(obj.LaserSpotSize(2))) ;
+      obj.gui.LaserSpotSizeGaugeX.Value = double(round(obj.LaserSpotSize(1))) ;
+      obj.gui.LaserSpotSizeGaugeY.Value = double(round(obj.LaserSpotSize(2))) ;
+      if ~isempty(lims)
+        rng=range(lims);
+        gp=GUI_PREFS;
+        ext=gp.gaugeLimitExtension;
+        scalelims=[lims(1)-rng*ext(1),lims(1);lims(1),lims(2);lims(2),lims(2)+rng*ext(2)];
+        obj.gui.LaserSpotSizeGaugeX.Limits=double([min(scalelims(:)),max(scalelims(:))]);
+        obj.gui.LaserSpotSizeGaugeY.Limits=double([min(scalelims(:)),max(scalelims(:))]);
+        obj.gui.LaserSpotSizeGaugeX.ScaleColors=gp.gaugeCol;
+        obj.gui.LaserSpotSizeGaugeX.ScaleColorLimits=double(scalelims);
+        obj.gui.LaserSpotSizeGaugeY.ScaleColors=gp.gaugeCol;
+        obj.gui.LaserSpotSizeGaugeY.ScaleColorLimits=double(scalelims);
+        if obj.gui.LaserSpotSizeX.Value<lims(1) || obj.gui.LaserSpotSizeX.Value>lims(2)
+          obj.gui.LaserSpotSizeX.BackgroundColor=[0.7 0 0];
+          obj.gui.LaserSpotSizeGaugeX.BackgroundColor=[0.7 0 0];
+        elseif obj.gui.LaserSpotSizeX.Editable
+          obj.gui.LaserSpotSizeX.BackgroundColor=[1 1 1];
+          obj.gui.LaserSpotSizeGaugeX.BackgroundColor=[1 1 1];
+        else
+          obj.gui.LaserSpotSizeX.BackgroundColor=[0 0 0];
+          obj.gui.LaserSpotSizeGaugeX.BackgroundColor=[1 1 1];
+        end
+        if obj.gui.LaserSpotSizeY.Value<lims(1) || obj.gui.LaserSpotSizeY.Value>lims(2)
+          obj.gui.LaserSpotSizeY.BackgroundColor=[0.7 0 0];
+          obj.gui.LaserSpotSizeGaugeY.BackgroundColor=[0.7 0 0];
+        elseif obj.gui.LaserSpotSizeY.Editable
+          obj.gui.LaserSpotSizeY.BackgroundColor=[1 1 1];
+          obj.gui.LaserSpotSizeGaugeY.BackgroundColor=[1 1 1];
+        else
+          obj.gui.LaserSpotSizeY.BackgroundColor=[0 0 0];
+          obj.gui.LaserSpotSizeGaugeY.BackgroundColor=[1 1 1];
+        end
+      end
+      
+      % Normalize image intensity
+      if obj.imgnormalize == "LaserEnergy"
+        img=double(obj.LaserEnergy).*(double(img)./double(max(img(:))));
+      else
+        img=double(obj.ImageIntensity).*(double(img)./double(max(img(:))));
+      end
+      
+      
       % If automated program running, integrate image -> abort if max integrated signal goes above ImageCIntMax threhold
       if isautopattern(obj.State) && obj.pvs.laser_shutterStatOut.val{1}
         if isempty(obj.pimg) || ~isequal(size(img),size(obj.pimg))
           obj.pimg=img;
         else
-          obj.pimg=obj.pimg+img;
+          % Integrate image over top 10% of intensity distribution (approx the area that is responsible for cleaning)
+          img_clean = img ;
+          cx = obj.LaserPosition_img(1) ; cy = obj.LaserPosition_img(2) ;
+          zeroimg = {xvals <= cx-obj.CleaningStepSize*1e3 | xvals >= cx+obj.CleaningStepSize*1e3 ; yvals <= cy-obj.CleaningStepSize*1e3 | yvals >= cy+obj.CleaningStepSize*1e3} ;
+          img_clean(:,zeroimg{1}) = 0 ;
+          img_clean(zeroimg{2},:) = 0 ;
+          try
+            obj.pimg=obj.pimg+img_clean;
+          catch ME
+            throw(ME);
+          end
         end
         % If QE Mapping, integrate charge and laser data here
         if obj.State == CathodeServicesState.QEMap_linescan
@@ -1821,6 +2237,7 @@ classdef F2_CathodeServicesApp < handle
           img = qdat ./ src ;
         end
       end
+      
     end
     function imdraw(obj,axhan)
       %IMDRAW VCC image drawing routine
@@ -1837,7 +2254,7 @@ classdef F2_CathodeServicesApp < handle
         [nx,ny,img] = obj.getimg ;
         xax=[obj.pvs.CCD_x1.val{1} obj.pvs.CCD_x2.val{1}].*1e-3; yax=[obj.pvs.CCD_y1.val{1} obj.pvs.CCD_y2.val{1}].*1e-3; % Axis ranges
         % Update image in axes window at imupdate rate if intensity above threshold
-        if obj.imupdate || isempty(tic_img) || ( ( obj.pvs.CCD_intensity.val{1} > obj.ImageIntensityRange(1) ) && toc(tic_img)>1/obj.imudrate )
+        if obj.imupdate || isempty(tic_img) || ( ( obj.ImageIntensity > obj.ImageIntensityRange(1) ) && toc(tic_img)>1/obj.imudrate )
           tic_img = tic ;
           if isempty(lastax) || ~isequal(lastax,[nx ny xax yax]) || obj.imupdate
             hold(axhan,'off');
@@ -1866,7 +2283,7 @@ classdef F2_CathodeServicesApp < handle
         end
         hold(axhan,'on');
         % Plot expected positions
-        plot(axhan,obj.LaserPosition_mot(1),obj.LaserPosition_mot(2),'rx','MarkerSize',20,'LineWidth',2); % position from laser mirrors
+        plot(axhan,obj.LaserPosition_mot(1),obj.LaserPosition_mot(2),'rx','MarkerSize',12,'LineWidth',1); % position from laser mirrors
         plot(axhan,obj.LaserPosition_img(1),obj.LaserPosition_img(2),'k.','MarkerSize',20); % centroid calculated by EPICS based on image
         if uint8(obj.State)>1 % for all states other than standby, draw cleaning areas
           % Draw circle showing cleaning area and rectangles showing test and energy set patterns
@@ -1882,6 +2299,8 @@ classdef F2_CathodeServicesApp < handle
           x0=xc-r; y0=yc-r;
           % Cleaning area
           rectangle(axhan,'Position',[x0,y0,2*r,2*r],'Curvature',1,'EdgeColor','k','LineWidth',3,'LineStyle','-');
+          adist=obj.AcclDist;
+          rectangle(axhan,'Position',[x0-adist(1),y0-adist(2),2*(r+adist(1)),2*(r+adist(2))],'Curvature',1,'EdgeColor','k','LineWidth',2,'LineStyle','--');
           plot(axhan,xc,yc,'k+','MarkerSize',20,'LineWidth',3);
           if isqemapstate(obj.State)
             obj.Proc_QEMap("SetBoundary",[x0,y0,2*r,2*r]);
@@ -1899,12 +2318,22 @@ classdef F2_CathodeServicesApp < handle
           end
         end
         if ~isempty(obj.gui) && imdrawn
-          drawnow limitrate
+%           drawnow limitrate
         end
       elseif imdrawn && ~isempty(obj.gui)
-        drawnow limitrate
+%         drawnow limitrate
       end
       obj.imupdate = false ;
+    end
+  end
+  methods(Static,Hidden)
+    function [inerr,inerr_tries] = procerr(ierr,maxerrtries,inerr,inerr_tries)
+      if inerr_tries(ierr)>=maxerrtries(ierr)
+        inerr(ierr) = true ;
+        inerr_tries(ierr)=0; % reset try count on error
+      else
+        inerr_tries(ierr)=inerr_tries(ierr)+1;
+      end
     end
   end
 end

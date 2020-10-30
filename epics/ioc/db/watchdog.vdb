@@ -47,12 +47,12 @@ record(calcout, "$(user):shutterOpOut") {
   field(INPC, "$(user):laserLo")
   field(INPD, "$(user):gunVacHi")
   field(INPE, "$(user):gunVacLo")
-  field(INPF, "LASR:LT10:930:PWR CA")
+  field(INPF, "PMTR:LT10:930:QUERYDATA CA")
   field(INPG, "VGCC:IN10:113:P CA")
   field(OUT, "IOC:SYS1:MP01:MSHUTCTL CPP")
   field(OOPT, "When Zero")
   field(DOPT, "Use OCAL")
-  field(OCAL, "1")
+  field(OCAL, "0")
 }
 
 #! Further lines contain data used by VisualDCT

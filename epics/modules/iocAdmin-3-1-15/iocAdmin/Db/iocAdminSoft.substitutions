@@ -1,0 +1,28 @@
+#==============================================================================
+#
+# Abs:  IOC Administration Records for Soft IOCs
+#
+# Name: iocAdminSoft.substitutions
+#
+#==============================================================================
+#
+file ioc.template
+{
+pattern { IOCNAME , TODFORMAT           }
+	{ $(IOC)  , "%m/%d/%Y %H:%M:%S" }
+}
+file iocGeneralTime.template
+{
+pattern { IOCNAME }
+	{ $(IOC)  }
+}
+file iocAdminScanMon.db
+{
+	pattern
+	{	IOCNAME	 }
+	{	"$(IOC)" }
+}
+file epicsEnvVars.db
+{
+	{ IOCNAME = "\$(IOC)" }
+}

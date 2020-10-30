@@ -1,0 +1,2 @@
+epicsEnvSet("IOC","ioctestStatsSoft")
+epicsEnvSet("TOP","/home/fphysics/whitegr/facet-sw/epics/modules/iocAdmin-3-1-15")

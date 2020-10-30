@@ -1,6 +1,7 @@
 Root directory is facet-sw/ (from https://github.com/slaclab/facet-sw repository)
 * Requires Matlab2020a+
 * Requires EPICS environment set on run host with access to PVs
+* For running in Matlab, the "common" directory in addition to required app directories should be added to the search path.
 
 >>> How to run a facet application:
 ----------

@@ -16,7 +16,7 @@ record(ao, TORR:IN10:1:VAL) {
 
 record(mbbo, LASR:LT10:100:TELE) {
   field(PINI, "YES")
-  field(VAL, "0")
+  field(VAL, "1")
   field(ZRST, "OUT")
   field(ONST, "IN")
 }

@@ -8,6 +8,6 @@ end
 addpath common
 addpath web
 cd(appname);
-appobj=eval(appname);
+appobj=eval([appname '_exported']);
 waitfor(appobj)
 exit
